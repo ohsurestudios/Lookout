@@ -1,3 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0716">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; height: 100%; }
+html, body { height: 100%; }
+body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
 <title>Spider Enclosure Builder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,7 +46,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
-.app { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); height: 100%; overflow: hidden; }
+/* Default (computers, tablets held sideways): 3D viewer left, options right */
+.app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 560px); height: 100%; overflow: hidden; }
 .stage-wrap { position: relative; height: 100%; min-height: 0; background: var(--stage); border-right: 1px solid var(--line); }
 #stage { position: absolute; inset: 0; }
 #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
@@ -169,18 +183,51 @@ button { cursor: pointer; }
 .minisw button { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); padding: 0; }
 .minisw button[aria-pressed="true"] { outline: 2px solid var(--lime); outline-offset: 2px; }
 
-@media (max-width: 860px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
-  .app { grid-template-rows: minmax(220px, 40%) minmax(0, 1fr); }
+/* Held upright (phones and tablets in portrait): viewer on top, options below */
+@media (orientation: portrait) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(220px, 42%) minmax(0, 1fr); }
   .stage-wrap { height: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+/* Phones upright: tighter header */
+@media (orientation: portrait) and (max-width: 599px) {
   .toolbar { padding-block: 8px; gap: 6px; }
   .hint { display: none; }
   .brand h1 { font-size: 1rem; }
   .brand .dims { display: none; }
 }
+/* Tablets upright: bigger viewer, roomier cards, everything a size up */
+@media (orientation: portrait) and (min-width: 600px) {
+  .app { grid-template-rows: minmax(320px, 48%) minmax(0, 1fr); }
+  .sections { padding-block: 20px 28px; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+  .toolbar { padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+  .pricebar { padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+  .cats { flex-wrap: wrap; }
+  .section { padding: 20px; }
+}
+/* Phones sideways: side by side, compact so the viewer isn't squished */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app { grid-template-columns: minmax(0, 1fr) minmax(300px, 48%); }
+  .brand .dims, .hint { display: none; }
+  .brand h1 { font-size: .95rem; }
+  .brand { top: 8px; }
+  .view-tools { bottom: 8px; gap: 4px; }
+  .view-tools .chip { padding: .25rem .6rem; font-size: .72rem; }
+  .toolbar { padding-block: 6px; gap: 5px; }
+  .sections { padding-block: 10px 14px; gap: 10px; }
+  .section { padding: 12px; gap: 10px; }
+  .pricebar { padding-block: 6px calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .pricebar .p strong { font-size: 1.05rem; }
+}
+/* Big screens: tabs never need to scroll sideways */
+@media (orientation: landscape) and (min-width: 1100px) {
+  .cats { flex-wrap: wrap; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
+
+</head>
+<body>
 <div class="app">
   <div class="stage-wrap">
     <div id="stage"><div class="loading" id="loading">Loading your enclosure…</div></div>
@@ -726,7 +773,7 @@ function showTab(id) {
   document.querySelectorAll(".section").forEach(sec => sec.classList.toggle("on", sec.id === id));
   applySearch();
   $("sectionsPane").scrollTop = 0;
-  const b = document.querySelector(`.cats button[data-tab="${id}"]`); if (b) { const nav = b.parentNode; nav.scrollLeft = b.offsetLeft - nav.clientWidth / 2 + b.offsetWidth / 2; }
+  const b = document.querySelector(`.cats button[data-tab="${id}"]`); if (b) { const nav = b.parentNode; const nr = nav.getBoundingClientRect(), br = b.getBoundingClientRect(); nav.scrollLeft += (br.left - nr.left) - nr.width / 2 + br.width / 2; }
 }
 document.querySelectorAll(".cats button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("reviewBtn").addEventListener("click", () => showTab("order"));
@@ -854,6 +901,9 @@ function initScene() {
   if (CONFIG.stickerImageUrl) { const im = new Image(); im.onload = () => { stickerArt = im; drawSticker(); }; im.src = CONFIG.stickerImageUrl; }
 
   window.addEventListener("resize", resize); if (window.ResizeObserver) new ResizeObserver(resize).observe(host); resize();
+  let lastOrient = matchMedia("(orientation: portrait)").matches;
+  const refit = () => { const o = matchMedia("(orientation: portrait)").matches; if (o !== lastOrient) { lastOrient = o; setTimeout(() => { resize(); setView(lastView, true); }, 120); } };
+  window.addEventListener("resize", refit); window.addEventListener("orientationchange", refit);
   setView("angle", true);
   $("loading").remove();
   animate();
@@ -1183,3 +1233,6 @@ function start() {
 if (document.fonts && document.fonts.load) { Promise.all([document.fonts.load("700 40px Rubik"), ...PLAQUE_FONTS.map(f => document.fonts.load(f.css.replace("SIZE", 40)))]).catch(() => {}).finally(start); }
 else start();
 </script>
+
+</body>
+</html>
