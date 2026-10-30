@@ -11,7 +11,7 @@ body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-seri
 img { max-width: 100%; }
 [hidden] { display: none !important; }
 </style>
-<title>Spider Enclosure Builder</title>
+<title>Spood Home Builder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -232,9 +232,9 @@ button { cursor: pointer; }
   <div class="stage-wrap">
     <div id="stage"><div class="loading" id="loading">Loading your enclosure…</div></div>
     <div class="brand">
-      <div class="kicker">OhSureStudios · Spider enclosures</div>
-      <h1>Lookout<br>Series</h1>
-      <div class="dims" id="brandDims">Mini · 75.5 × 120 × 154.7 mm</div>
+      <div class="kicker">OhSureStudios</div>
+      <h1>Spood Home<br>Builder</h1>
+      <div class="dims" id="brandDims">Lookout Mini · 75.5 × 120 × 154.7 mm</div>
     </div>
     <div class="hint">Drag to spin<br>Pinch or scroll to zoom</div>
     <div class="view-tools" role="toolbar" aria-label="View">
@@ -272,7 +272,7 @@ button { cursor: pointer; }
     <div class="sections" id="sectionsPane">
       <div class="bulknote" id="bulkNote" hidden>Bulk kit is on: base Lookout Mini in one color, no add ons. You supply the acrylic, which must be 1 mm thick. Turn it off in the Build tab to customize.</div>
       <section class="section" id="size" data-search="size sizes shelf small mid big tall dimensions">
-        <div class="section-head"><h2>Size</h2><span class="tag">Outside W × D × H</span></div>
+        <div class="section-head"><h2>Size</h2><span class="tag"><b>Lookout Series</b> · outside W × D × H</span></div>
         <div class="opts" id="sizeOpts"></div>
       </section>
 
@@ -761,7 +761,7 @@ function renderSize() {
     price: open ? money(PRICES.sizes[z.id].enclosure) : "Coming soon", pressed: state.size === z.id, disabled: !open,
     search: `${z.name} ${z.dims} ${z.desc} size`,
     onClick: () => { if (!open) return; state.size = z.id; if (!z.trays) state.tray = "none"; changed(); } }); });
-  $("brandDims").textContent = `${sizeInfo().name} · ${sizeInfo().mm}`;
+  $("brandDims").textContent = `Lookout ${sizeInfo().name} · ${sizeInfo().mm}`;
 }
 const TAB_ORDER = ["size", "colors", "front", "walls", "addons", "build", "order"];
 let activeTab = "size";
