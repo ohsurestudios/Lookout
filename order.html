@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b12">
+<meta name="robots" content="noindex, nofollow">
+<title>Order Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Order sheet for OSS 3D Orders: same dark cards, rainbow edge and uppercase section labels as the app */
+:root {
+  --bg: #0b0b12; --card: #12121c; --card2: #171724; --line: #262636; --fg: #f2f0fa; --muted: #9a97b3;
+  --green: #4dff88; --cyan: #2ee6ff; --pink: #ff3fd0; --sun: #ffd93d; --bad: #ff6b7d;
+  --body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+[hidden] { display: none !important; }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+.top { position: relative; background: var(--card); border-radius: 18px; padding: 18px 16px 16px; border: 1px solid var(--line); overflow: hidden; }
+.top::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, #ff9a3d, #ffd93d, #4dff88, #2ee6ff, #7a5cff, #ff3fd0); }
+.kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+h1 { margin: 4px 0 2px; font-size: 1.45rem; line-height: 1.2; }
+.sub { color: var(--muted); font-size: .9rem; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pill { font-size: .78rem; font-weight: 600; padding: .25rem .6rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); }
+.pill.paid { color: #08200f; background: var(--green); border-color: var(--green); }
+.pill.warn { color: #1a1400; background: var(--sun); border-color: var(--sun); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card h2 { margin: 0; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; font-size: .95rem; }
+.row .r { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row.total { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; }
+.row.total .r { color: var(--green); }
+.addr { font-size: .98rem; line-height: 1.5; }
+.addr .muted { color: var(--muted); font-size: .88rem; }
+.copy { justify-self: start; background: none; border: 1px solid var(--cyan); color: var(--cyan); border-radius: 9px; padding: .3rem .7rem; font-size: .8rem; font-weight: 600; }
+.item { display: grid; gap: 12px; }
+.itemhead { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; }
+.itemhead img, .itemhead .noimg { width: 96px; height: 96px; object-fit: cover; border-radius: 12px; background: #07070c; border: 1px solid var(--line); }
+.itemhead h3 { margin: 0; font-size: 1.1rem; }
+.itemhead .price { font-family: var(--mono); color: var(--green); font-size: .9rem; }
+.itemhead .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.parts { display: grid; }
+.part { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+.part:first-child { border-top: 0; }
+.pn { font-weight: 600; font-size: .95rem; }
+.pc { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .86rem; margin-top: 2px; flex-wrap: wrap; }
+.sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); flex: none; }
+.qty { font-family: var(--mono); font-weight: 700; font-size: 1rem; background: var(--card2); border: 1px solid var(--line); border-radius: 9px; padding: .2rem .55rem; }
+.flag { font-size: .7rem; font-weight: 700; color: #1a1400; background: var(--sun); border-radius: 6px; padding: .05rem .4rem; }
+.sub2 { font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.note { font-size: .92rem; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; }
+.warnbox { font-size: .9rem; background: rgba(255,217,61,.1); border: 1px solid var(--sun); border-radius: 12px; padding: 10px 12px; }
+.logo { width: 120px; height: 120px; object-fit: contain; background: #fff; border-radius: 12px; }
+a { color: var(--cyan); }
+#sheet { display: grid; gap: 14px; }
+.state { text-align: center; color: var(--muted); padding: 40px 10px; }
+.hl { outline: 2px solid var(--pink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="state" id="state">Loading order…</div>
+  <div id="sheet" hidden></div>
+</div>
+<script>
+// Web name of the order-sheet function (the end of its Endpoint URL in Supabase)
+const SUPABASE_URL = "https://pavkyapbvycspkjjpwkb.supabase.co";
+const SHEET_FUNCTION = "order-sheet";
+
+const COLORS = {"Ivory White":"#FFFFFF","Bone White":"#CBC6B8","Desert Tan":"#E8DBB7","Latte Brown":"#D3B7A7","Caramel":"#AE835B","Terracotta":"#B15533","Dark Brown":"#7D6556","Dark Chocolate":"#4D3324","Lemon Yellow":"#F7D959","Mandarin Orange":"#F99963","Sakura Pink":"#E8AFCF","Lilac Purple":"#AE96D4","Plum":"#950051","Scarlet Red":"#DE4343","Dark Red":"#BB3D43","Apple Green":"#C2E189","Grass Green":"#61C680","Dark Green":"#68724D","Ice Blue":"#A3D8E1","Sky Blue":"#56B7E6","Marine Blue":"#0078BF","Dark Blue":"#042F56","Ash Gray":"#9B9EA0","Nardo Gray":"#757575","Charcoal":"#000000"};
+const SIZES = {
+  small: { name: "Slim", dims: "3 × 3 × 6.1 in", door: "2 1/4 × 5 in", side: "2 1/4 × 5 in", sky: "2 1/2 × 2 1/2 in" },
+  shelf: { name: "Mini", dims: "3 × 4.7 × 6.1 in", door: "2 1/4 × 5 in", side: "4 × 5 in", sky: "2 1/2 × 4 in" },
+  mid: { name: "Classic", dims: "6 × 7 × 6.1 in", door: "5 1/4 × 5 in", side: "6 1/4 × 5 in", sky: "5 × 6 1/2 in" },
+  big: { name: "Grand", dims: "7.7 × 7.7 × 6.1 in", door: "7 × 5 in", side: "7 × 5 in", sky: "5 × 7 in" },
+  tall: { name: "Tall", dims: "5.7 × 5.7 × 8.1 in", door: "5 × 7 in", side: "5 × 7 in", sky: "4 1/2 × 4 in" },
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const usd = n => (n == null || isNaN(n)) ? "—" : "$" + Number(n).toFixed(2);
+const sw = c => `<span class="sw" style="background:${COLORS[c] || "#555"}"></span>${esc(c)}`;
+
+function partsFor(b) {
+  const q = b.qty || 1, c = b.colors || {}, rows = [];
+  const add = (name, colorHtml, qty, flag, extra) => rows.push({ name, colorHtml, qty, flag, extra });
+  if (b.bulk) {
+    add("Body (base + posts)", sw(c.posts), q);
+    add("Lid", sw(c.posts), q); add("Skylight frame", sw(c.posts), q); add("Door handle", sw(c.posts), q);
+  } else {
+    add("Body", c.posts && c.posts !== c.base ? `${sw(c.base)} base · ${sw(c.posts)} posts` : sw(c.base), q);
+    for (const [k, n] of [["lid", "Lid"], ["frame", "Skylight frame"], ["door", "Door handle"]])
+      add(n, sw(c[k]), q, c[k] !== c.base ? "Own plate" : "");
+  }
+  const w = b.walls || {};
+  if (w.back === "solid") add("Solid back panel", sw(c.walls), q);
+  const sides = (w.left === "solid" ? 1 : 0) + (w.right === "solid" ? 1 : 0);
+  if (sides) add(`Solid side panel${sides > 1 ? "s" : ""} (${[w.left === "solid" ? "left" : "", w.right === "solid" ? "right" : ""].filter(Boolean).join(" + ")})`, sw(c.walls), q * sides);
+  if (b.floor) add("Humidity floor", sw(c.floor), q);
+  if (b.front === "plaque") add(`Name plaque: “${b.plaqueName || ""}”`, `${sw(c.plaque)} plaque · ${sw(c.plaqueText)} letters · ${esc(b.plaqueFont || "Fredoka")} font`, q);
+  else if (b.front === "logo") add("Customer logo sticker over NFC tag", "See logo below", q);
+  else add("Spider sticker over NFC tag", "OhSureStudios sticker", q);
+  add("NFC tag", "25 mm", q);
+  if (b.tray && b.tray !== "none") add(`Tray, holds ${b.tray}`, sw(c.tray), b.trayQty || 1);
+  return rows;
+}
+function acrylicFor(b) {
+  if (b.bulk) return [];
+  const z = SIZES[b.size] || SIZES.shelf, q = b.qty || 1, w = b.walls || {}, out = [];
+  out.push(["Door", z.door, q]);
+  if (w.back !== "solid") out.push(["Back", z.door, q]);
+  const clearSides = (w.left !== "solid" ? 1 : 0) + (w.right !== "solid" ? 1 : 0);
+  if (clearSides) out.push([clearSides > 1 ? "Sides" : "Side", z.side, q * clearSides]);
+  out.push(["Skylight", z.sky, q]);
+  return out;
+}
+function partRow(r) {
+  return `<div class="part"><div><div class="pn">${esc(r.name)} ${r.flag ? `<span class="flag">${esc(r.flag)}</span>` : ""}</div><div class="pc">${r.colorHtml}</div></div><div class="qty">×${r.qty}</div></div>`;
+}
+function render(d, focus) {
+  const ship = d.customer.ship || {}, paid = d.customer.paid || {};
+  const n = d.items.length;
+  const shipZip = String(ship.zip || "").slice(0, 5);
+  const totalCount = d.items.reduce((a, it) => a + (it.build?.qty || 1), 0);
+  let h = `<div class="top"><div class="kicker">OSS 3D Orders · Lookout order</div><h1>${esc(d.ref)}</h1>
+    <div class="sub">${esc(ship.name || d.customer.name)} · ${totalCount} enclosure${totalCount > 1 ? "s" : ""}${d.paidAt ? " · paid " + new Date(d.paidAt).toLocaleString() : ""}</div>
+    <div class="pills"><span class="pill paid">PAID</span>${n > 1 ? `<span class="pill">${n} builds</span>` : ""}${d.shipping.boxes ? `<span class="pill">${d.shipping.boxes} box${d.shipping.boxes > 1 ? "es" : ""}</span>` : ""}${shipZip && d.quotedZip && shipZip !== d.quotedZip ? `<span class="pill warn">Check shipping zip</span>` : ""}</div></div>`;
+
+  h += `<div class="card"><h2>Ship to</h2>`;
+  if (ship.line1) {
+    const addrText = [ship.name, ship.line1, ship.line2, `${ship.city}, ${ship.state} ${ship.zip}`].filter(Boolean).join("\n");
+    h += `<div class="addr">${esc(ship.name)}<br>${esc(ship.line1)}${ship.line2 ? "<br>" + esc(ship.line2) : ""}<br>${esc(ship.city)}, ${esc(ship.state)} ${esc(ship.zip)}<br><span class="muted">${esc(ship.email)}${ship.phone ? " · " + esc(ship.phone) : ""}</span></div>
+      <button class="copy" type="button" data-copy="${esc(addrText)}">Copy address</button>`;
+    if (shipZip && d.quotedZip && shipZip !== d.quotedZip) h += `<div class="warnbox">Shipping was quoted to <b>${esc(d.quotedZip)}</b>, but the address is in <b>${esc(shipZip)}</b>. Check the label price before buying it.</div>`;
+  } else h += `<div class="addr muted">No shipping address saved for this order. Check it in Stripe.</div>`;
+  h += `</div>`;
+
+  d.items.forEach((it, i) => {
+    const b = it.build || {}, z = SIZES[b.size] || SIZES.shelf;
+    const tags = [b.bulk ? "Bulk kit · unassembled · no acrylic" : "Assembled", z.dims].map(t => `<span class="pill">${esc(t)}</span>`).join("");
+    h += `<div class="card item" id="item${i + 1}"><div class="itemhead">${it.preview_url ? `<img src="${esc(it.preview_url)}" alt="3D preview of build ${i + 1}">` : `<div class="noimg"></div>`}
+      <div><div class="kicker">Build ${i + 1} of ${n}</div><h3>Lookout ${esc(z.name)}${b.bulk ? " bulk kit" : ""} × ${b.qty || 1}</h3><div class="price">${usd(it.total)}</div><div class="tags">${tags}</div></div></div>
+      <div class="sub2">Parts</div><div class="parts">${partsFor(b).map(partRow).join("")}</div>`;
+    const acr = acrylicFor(b);
+    if (acr.length) h += `<div class="sub2">Acrylic, 1 mm</div><div class="parts">${acr.map(([nm, size, q]) => partRow({ name: nm, colorHtml: esc(size), qty: q })).join("")}</div>`;
+    else if (b.bulk) h += `<div class="note">Customer supplies their own 1 mm acrylic.</div>`;
+    if (b.front === "logo" && it.logo_url) h += `<div class="sub2">Customer logo</div><a href="${esc(it.logo_url)}" target="_blank" rel="noopener"><img class="logo" src="${esc(it.logo_url)}" alt="Customer logo"></a><a href="${esc(it.logo_url)}" target="_blank" rel="noopener">Open full size logo</a>`;
+    if (b.colorRequest) h += `<div class="sub2">Color request</div><div class="warnbox">${esc(b.colorRequest)}</div>`;
+    if (it.unitRows && it.unitRows.length) h += `<div class="sub2">Price, each</div>${it.unitRows.map(r => `<div class="row"><span>${esc(r.label)}</span><span class="r">${usd(r.amount)}</span></div>`).join("")}`;
+    h += `</div>`;
+  });
+
+  if (d.customer.notes) h += `<div class="card"><h2>Customer notes</h2><div class="note">${esc(d.customer.notes)}</div></div>`;
+
+  h += `<div class="card"><h2>Payment</h2>
+    <div class="row"><span>Enclosures</span><span class="r">${usd(paid.subtotal)}</span></div>
+    <div class="row"><span>Shipping${d.shipping.service ? " (" + esc(d.shipping.service) + ")" : ""}</span><span class="r">${usd(paid.shipping)}</span></div>
+    <div class="row total"><span>Paid</span><span class="r">${usd(paid.total)}</span></div></div>`;
+
+  $("#sheet").innerHTML = h; $("#sheet").hidden = false; $("#state").hidden = true;
+  document.title = `Order ${d.ref}`;
+  document.querySelectorAll("[data-copy]").forEach(btn => btn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = "Copied"; } catch (e) { btn.textContent = "Couldn't copy"; }
+  }));
+  if (focus && n > 1) { const el = $("#item" + focus); if (el) { el.classList.add("hl"); el.scrollIntoView({ block: "start" }); } }
+}
+(async () => {
+  const p = new URLSearchParams(location.search), id = p.get("id"), item = p.get("item");
+  if (!id) { $("#state").textContent = "This page needs an order link from OSS 3D Orders."; return; }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/${SHEET_FUNCTION}?id=${encodeURIComponent(id)}`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Couldn't load the order (${r.status}).`);
+    render(d, item);
+  } catch (e) { $("#state").textContent = e.message || "Couldn't load the order."; }
+})();
+</script>
+</body>
+</html>
