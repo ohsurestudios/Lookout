@@ -86,6 +86,23 @@ button { cursor: pointer; }
 .bulknote { background: rgba(255,217,61,.08); border: 1px solid var(--sun); color: var(--fg); border-radius: 12px; padding: 10px 12px; font-size: .84rem; }
 .paynote { background: rgba(46,230,255,.07); border: 1px solid var(--cyan); border-radius: 12px; padding: 10px 12px; font-size: .84rem; }
 .paynote b { color: var(--cyan); }
+.badge { display: inline-grid; place-items: center; min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; margin-left: .35rem; border-radius: 999px; background: var(--lime); color: #10180a; font-size: .7rem; font-weight: 800; }
+.cats button[aria-selected="true"] .badge { background: #1a0613; color: var(--lime); }
+.pricebar .pbcart { background: none; border: 0; padding: 0; font-weight: 500; text-align: left; color: var(--cyan); font-size: .74rem; text-decoration: underline; text-underline-offset: 2px; }
+.cartlist { display: grid; gap: 10px; }
+.cartitem { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
+.cartitem img, .cartitem .noimg { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; background: var(--stage); }
+.cartitem .ci { min-width: 0; display: grid; gap: 4px; }
+.cartitem .ct { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: .92rem; }
+.cartitem .ct .amt { font-family: var(--mono); color: var(--lime); white-space: nowrap; }
+.cartitem .cd { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+.cartitem .cb { display: flex; gap: 8px; margin-top: 2px; }
+.cartitem .cb button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: .25rem .6rem; font-size: .76rem; color: var(--fg); }
+.cartitem .cb button.rm { color: var(--bad); }
+.cartempty { color: var(--muted); font-size: .88rem; background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; padding: 14px; }
+.pendingnote { font-size: .82rem; background: rgba(255,217,61,.08); border: 1px solid var(--sun); border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.pendingnote button { background: var(--sun); color: #1a1400; border: 0; border-radius: 8px; padding: .35rem .7rem; font-weight: 700; font-size: .8rem; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom, 0px)); z-index: 50; background: var(--lime); color: #10180a; font-weight: 700; font-size: .9rem; padding: .6rem 1rem; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); max-width: calc(100vw - 32px); text-align: center; }
 .searchnote { font-size: .8rem; color: var(--muted); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .section h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.05rem; letter-spacing: .02em; }
@@ -264,7 +281,7 @@ button { cursor: pointer; }
         <button type="button" role="tab" data-tab="walls" aria-selected="false"><span class="dot" style="background:var(--cyan)"></span>Walls</button>
         <button type="button" role="tab" data-tab="addons" aria-selected="false"><span class="dot" style="background:var(--lime)"></span>Add ons</button>
         <button type="button" role="tab" data-tab="build" aria-selected="false"><span class="dot" style="background:#b14bff"></span>Build</button>
-        <button type="button" role="tab" data-tab="order" aria-selected="false"><span class="dot" style="background:#fff"></span>Order</button>
+        <button type="button" role="tab" data-tab="order" data-label="Cart" aria-selected="false"><span class="dot" style="background:#fff"></span>Cart<span class="badge" id="cartBadge" hidden>0</span></button>
       </nav>
       <div class="searchnote" id="searchNote" hidden>Showing everything that matches. Clear the search to go back to tabs.</div>
     </div>
@@ -281,7 +298,7 @@ button { cursor: pointer; }
           <h2>Colors</h2>
           <span class="tag" id="colorCountTag"></span>
         </div>
-        <p class="note">Pick a part, then pick its color. Your first color is included; each extra color is an add on.</p>
+        <p class="note">Pick a part, then pick its color. Your first color is included, a second color is $1, and each color after that is 25¢.</p>
         <div class="zones" id="zones"></div>
         <div class="palette-head">
           <div class="now">Coloring: <b id="activeZoneName">Posts</b></div>
@@ -352,12 +369,16 @@ button { cursor: pointer; }
           <span style="font-size:.88rem">How many of this enclosure?</span>
           <div class="stepper"><button id="qtyMinus" aria-label="One fewer">−</button><output id="qty">1</output><button id="qtyPlus" aria-label="One more">+</button></div>
         </div>
+        <button type="button" class="send" id="addBtn">Add to order</button>
+        <p class="note" style="font-size:.78rem;margin-top:-4px">Adds this enclosure to your cart and starts a fresh one, so you can build another.</p>
       </section>
 
-      <section class="section" id="order" data-search="order send summary price contact">
-        <div class="section-head"><h2>Your order</h2><span class="placeholder-flag" id="phFlag">Sample prices</span></div>
+      <section class="section" id="order" data-search="cart order checkout send summary price contact">
+        <div class="section-head"><h2>Your cart</h2><span class="placeholder-flag" id="phFlag">Sample prices</span></div>
+        <div class="cartlist" id="cartList"></div>
+        <div class="cartempty" id="cartEmpty">Your cart is empty. Build an enclosure, then tap <b>Add to order</b>.</div>
+        <div class="pendingnote" id="pendingNote" hidden></div>
         <div class="lines" id="lines"></div>
-        <div class="details" id="details"></div>
         <form id="orderForm" novalidate style="display:grid;gap:10px">
           <div class="grid2">
             <div class="field" id="fName"><label for="cName">Your name</label><input id="cName" autocomplete="name" required></div>
@@ -375,8 +396,8 @@ button { cursor: pointer; }
     </div>
 
     <div class="pricebar">
-      <div class="p"><small id="pbLabel">1 enclosure</small><strong id="pbTotal">$0</strong><small id="pbShip">plus shipping</small></div>
-      <button type="button" id="reviewBtn">Review order</button>
+      <div class="p"><small id="pbLabel">This enclosure</small><strong id="pbTotal">$0</strong><button type="button" class="pbcart" id="pbCart">Cart is empty</button></div>
+      <button type="button" id="reviewBtn">Add to order</button>
     </div>
   </div>
 </div>
@@ -408,7 +429,8 @@ const PRICES = {
     tall:  { enclosure: 60, solidWall: 6, humidityFloor: 10 }
   },
   trays: { shelf2: 2, shelf3: 3, small2: 8, small3: 11 },
-  extraColor: 1,       // each color beyond the first
+  secondColor: 1,      // the second color (one AMS color change)
+  moreColors: 0.25,    // each color after the second (extra single color plates)
   namePlaque: 3,       // name plaque (NFC tag sealed inside)
   logoSticker: 5,      // your logo printed over the NFC tag
   bulkKit: 7,          // each Mini in a bulk order: base, one color, no acrylic, unassembled
@@ -507,7 +529,9 @@ function unitBreakdown() {
   const sp = sizePrice();
   const rows = [[`Lookout ${sizeInfo().name}`, sp.enclosure]];
   const extra = Math.max(0, enclosureColors().length - 1);
-  if (extra) rows.push([`${extra} extra color${extra > 1 ? "s" : ""}`, extra * PRICES.extraColor]);
+  if (enclosureColors().length >= 2) rows.push(["2nd color", PRICES.secondColor]);
+  const more = Math.max(0, enclosureColors().length - 2);
+  if (more) rows.push([`${more} more color${more > 1 ? "s" : ""}`, Math.round(more * PRICES.moreColors * 100) / 100]);
   if (state.front === "plaque") rows.push(["Name plaque", PRICES.namePlaque]);
   if (state.front === "logo") rows.push(["Your logo over the NFC tag", PRICES.logoSticker]);
   const sc = solidCount();
@@ -706,30 +730,139 @@ function summaryText() {
   L.push(`Total: ${money(t.total)}`);
   return L.join("\n");
 }
+/* ---------------- cart ---------------- */
+let cart = [];
+try { const c = JSON.parse(localStorage.getItem("ossEncCart") || "[]"); if (Array.isArray(c)) cart = c.filter(it => it && it.build && it.build.colors); } catch (e) {}
+function saveCart() {
+  try { localStorage.setItem("ossEncCart", JSON.stringify(cart)); }
+  catch (e) { try { localStorage.setItem("ossEncCart", JSON.stringify(cart.map(it => Object.assign({}, it, { logo: null, preview: null })))); } catch (e2) {} }
+}
+function withState(b, fn) { const keep = state; state = b; try { return fn(); } finally { state = keep; } }
+function cartTotal() { return Math.round(cart.reduce((a, it) => a + it.total, 0) * 100) / 100; }
+function itemTitle(it) { const z = SIZES.find(x => x.id === it.build.size) || SIZES[0]; return `Lookout ${z.name}${it.build.bulk ? " bulk kit" : ""} × ${it.build.qty}`; }
+function itemLines(it) {
+  return withState(it.build, () => {
+    const parts = activeZones().filter(z => !z.ownPrint).map(z => `${state.bulk && z.bulkName ? z.bulkName : z.name}: ${state.colors[z.id]}`);
+    const extra = [frontLabel()];
+    const solid = ["back", "left", "right"].filter(k => state.walls[k] === "solid");
+    if (solid.length) extra.push(`Solid ${solid.join(", ")} (${state.colors.walls})`);
+    if (state.floor) extra.push(`Humidity floor (${state.colors.floor})`);
+    if (state.tray !== "none") extra.push(`Tray holds ${state.tray} × ${state.trayQty} (${state.colors.tray})`);
+    if ((state.colorRequest || "").trim()) extra.push(`Color request: ${state.colorRequest.trim()}`);
+    return [parts.join(" · "), extra.join(" · ")];
+  });
+}
+function cartCount() { return cart.reduce((a, it) => a + it.build.qty, 0); }
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+function previewDataUrl() {
+  try {
+    renderer.render(scene, camera);
+    const src = renderer.domElement, w = 360, h = Math.round(360 * src.height / Math.max(src.width, 1));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(src, 0, 0, w, h);
+    return c.toDataURL("image/jpeg", 0.82);
+  } catch (e) { return null; }
+}
+function buildProblems() {
+  const errs = [];
+  if (state.front === "plaque" && !state.plaqueName.trim()) errs.push("Type the name for the plaque in the Front tab.");
+  if (state.front === "logo" && !logo) { errs.push("Upload your logo art in the Front tab."); showLogoErr("Logo art is required for this option."); }
+  return errs;
+}
+function resetBuilder() {
+  const size = state.size;
+  state = JSON.parse(JSON.stringify(DEFAULT_STATE)); state.size = size;
+  logo = null; $("logoFile").value = ""; $("logoPreview").hidden = true; $("logoName").textContent = "PNG, JPG, or SVG. A square image works best.";
+  $("plaqueName").value = ""; $("colorRequest").value = ""; activeZone = "posts";
+  changed();
+}
+function addToOrder() {
+  const errs = buildProblems();
+  if (errs.length) { toast(errs[0]); showTab("front"); return; }
+  const t = totals();
+  cart.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    build: JSON.parse(JSON.stringify(buildPayload())),
+    total: t.total, unit: t.unit, summary: summaryText(),
+    preview: previewDataUrl(),
+    logo: state.front === "logo" && logo ? { name: logo.file.name, type: logo.file.type, dataUrl: logo.dataUrl } : null,
+  });
+  saveCart();
+  resetBuilder();
+  showTab("size");
+  toast(`Added! ${cartCount()} in your cart. Build another or open the Cart tab.`);
+}
+function editItem(id) {
+  const it = cart.find(x => x.id === id); if (!it) return;
+  cart = cart.filter(x => x.id !== id); saveCart();
+  const b = JSON.parse(JSON.stringify(it.build));
+  state = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), b, { colors: Object.assign({}, DEFAULT_STATE.colors, b.colors), walls: Object.assign({}, DEFAULT_STATE.walls, b.walls), assembled: !b.bulk, acrylic: !b.bulk });
+  $("plaqueName").value = state.plaqueName || ""; $("colorRequest").value = state.colorRequest || "";
+  logo = null; $("logoPreview").hidden = true;
+  if (it.logo && it.logo.dataUrl) {
+    const img = new Image();
+    img.onload = () => { logo = { file: dataUrlToFile(it.logo.dataUrl, it.logo.name, it.logo.type), dataUrl: it.logo.dataUrl, img }; $("logoPreview").src = it.logo.dataUrl; $("logoPreview").hidden = false; $("logoName").textContent = it.logo.name; drawSticker(); };
+    img.src = it.logo.dataUrl;
+  }
+  changed(); showTab("colors");
+  toast("Editing this enclosure. Tap Add to order when it's ready.");
+}
+function removeItem(id) { cart = cart.filter(x => x.id !== id); saveCart(); renderSummary(); }
+function dataUrlToBlob(u) {
+  const [head, b64] = u.split(","); const type = (head.match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+  const bin = atob(b64); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return new Blob([a], { type });
+}
+function dataUrlToFile(u, name, type) { const b = dataUrlToBlob(u); try { return new File([b], name, { type: type || b.type }); } catch (e) { b.name = name; return b; } }
+function isDirty() { return JSON.stringify(buildPayload()) !== JSON.stringify(withState(Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), { size: state.size }), buildPayload)) || !!logo; }
+
+function renderCart() {
+  const list = $("cartList"); list.innerHTML = "";
+  cart.forEach((it, n) => {
+    const row = document.createElement("div"); row.className = "cartitem";
+    const [l1, l2] = itemLines(it);
+    row.innerHTML = `${it.preview ? `<img alt="">` : `<div class="noimg"></div>`}<div class="ci"><div class="ct"><span></span><span class="amt"></span></div><div class="cd"></div><div class="cd"></div><div class="cb"><button type="button" class="ed">Edit</button><button type="button" class="rm">Remove</button></div></div>`;
+    if (it.preview) { row.querySelector("img").src = it.preview; row.querySelector("img").alt = `Preview of enclosure ${n + 1}`; }
+    row.querySelector(".ct span").textContent = `${n + 1}. ${itemTitle(it)}`;
+    row.querySelector(".amt").textContent = money(it.total);
+    row.querySelectorAll(".cd")[0].textContent = l1;
+    row.querySelectorAll(".cd")[1].textContent = l2;
+    row.querySelector(".ed").addEventListener("click", () => editItem(it.id));
+    row.querySelector(".rm").addEventListener("click", () => removeItem(it.id));
+    list.appendChild(row);
+  });
+  $("cartEmpty").hidden = cart.length > 0;
+  $("orderForm").hidden = cart.length === 0;
+  const badge = $("cartBadge"); badge.hidden = cart.length === 0; badge.textContent = cartCount();
+  const pn = $("pendingNote");
+  if (isDirty()) {
+    pn.hidden = false;
+    pn.innerHTML = `<span>You have an enclosure in the builder (${money(totals().total)}) that isn't in your cart yet.</span><button type="button" id="pnAdd">Add it</button>`;
+    $("pnAdd").onclick = () => { addToOrder(); showTab("order"); };
+  } else pn.hidden = true;
+}
+
 function renderSummary() {
   const t = totals();
+  renderCart();
   const box = $("lines"); box.innerHTML = "";
   const add = (label, amt, cls) => { const d = document.createElement("div"); d.className = "line" + (cls ? " " + cls : ""); d.innerHTML = `<span></span><span class="amt"></span>`; d.children[0].textContent = label; d.children[1].textContent = amt; box.appendChild(d); };
-  add(`Enclosure × ${state.qty}`, money(t.encTotal));
-  t.unitRows.forEach(r => add(r[0], money(r[1]), "sub"));
-  if (state.qty > 1) add(`Each enclosure`, money(t.unit), "sub");
-  if (state.tray !== "none") add(`Tray holds ${state.tray} × ${state.trayQty}`, money(t.trayTotal));
-  const sub = quote.status === "ok" ? quote.data.subtotal : t.total;
-  add("Subtotal", money(sub), "subtot");
-  const shipText = { idle: "Enter your zip", loading: "Checking…", ok: quote.data ? money(quote.data.shipping) : "", error: "Not available", preview: "At checkout" }[quote.status];
-  add(quote.status === "ok" && quote.data.boxes > 1 ? `Shipping (${quote.data.boxes} boxes)` : "Shipping", shipText);
-  if (quote.status === "error") { const d = document.createElement("div"); d.className = "errmsg"; d.textContent = quote.error; box.appendChild(d); }
-  add(quote.status === "ok" ? "Total" : "Total before shipping", money(quote.status === "ok" ? quote.data.total : t.total), "total");
-  const det = $("details");
-  const colorLines = `<div><b>Size:</b> ${sizeInfo().name}, ${sizeInfo().dims}</div>` + activeZones().map(z => `<div><b>${state.bulk && z.bulkName ? z.bulkName : z.name}:</b> ${state.colors[z.id]}</div>`).join("");
-  det.innerHTML = colorLines + `<div><b>Front:</b> ${escapeHtml(frontLabel())}</div>` +
-    ((state.colorRequest || "").trim() ? `<div><b>Color request:</b> ${escapeHtml(state.colorRequest.trim())}</div>` : "") +
-    (state.acrylic ? "" : `<div><b>You supply 1 mm thick acrylic:</b> ${acrylicList().join(", ")}</div>`);
-  $("pbTotal").textContent = money(quote.status === "ok" ? quote.data.total : t.total);
-  $("pbShip").textContent = quote.status === "ok" ? "with shipping" : "plus shipping";
-  requestQuote();
-  $("pbLabel").textContent = `${state.qty} enclosure${state.qty > 1 ? "s" : ""}${state.tray !== "none" ? ` + ${state.trayQty} tray${state.trayQty > 1 ? "s" : ""}` : ""}`;
+  if (cart.length) {
+    const sub = quote.status === "ok" ? quote.data.subtotal : cartTotal();
+    add(`Subtotal (${cartCount()} enclosure${cartCount() > 1 ? "s" : ""})`, money(sub), "subtot");
+    const shipText = { idle: "Enter your zip", loading: "Checking…", ok: quote.data ? money(quote.data.shipping) : "", error: "Not available", preview: "At checkout" }[quote.status];
+    add(quote.status === "ok" && quote.data.boxes > 1 ? `Shipping (${quote.data.boxes} boxes)` : "Shipping", shipText);
+    if (quote.status === "error") { const d = document.createElement("div"); d.className = "errmsg"; d.textContent = quote.error; box.appendChild(d); }
+    add(quote.status === "ok" ? "Total" : "Total before shipping", money(quote.status === "ok" ? quote.data.total : cartTotal()), "total");
+  }
+  $("pbLabel").textContent = `This enclosure${state.qty > 1 ? ` × ${state.qty}` : ""}`;
+  $("pbTotal").textContent = money(t.total);
+  $("pbCart").textContent = cart.length ? `Cart: ${cartCount()} · ${money(cartTotal())} →` : "Cart is empty";
   $("phFlag").hidden = !CONFIG.pricesAreSamples;
+  requestQuote();
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
@@ -776,12 +909,15 @@ function showTab(id) {
   const b = document.querySelector(`.cats button[data-tab="${id}"]`); if (b) { const nav = b.parentNode; const nr = nav.getBoundingClientRect(), br = b.getBoundingClientRect(); nav.scrollLeft += (br.left - nr.left) - nr.width / 2 + br.width / 2; }
 }
 document.querySelectorAll(".cats button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
-$("reviewBtn").addEventListener("click", () => showTab("order"));
+$("reviewBtn").addEventListener("click", addToOrder);
+$("addBtn").addEventListener("click", addToOrder);
+$("pbCart").addEventListener("click", () => showTab("order"));
 document.querySelectorAll(".section").forEach(sec => {
   const k = TAB_ORDER.indexOf(sec.id);
   if (k < 0 || k === TAB_ORDER.length - 1) return;
   const nb = document.createElement("button"); nb.type = "button"; nb.className = "nextbtn";
-  const nextName = document.querySelector(`.cats button[data-tab="${TAB_ORDER[k + 1]}"]`).textContent.trim();
+  const nb2 = document.querySelector(`.cats button[data-tab="${TAB_ORDER[k + 1]}"]`);
+  const nextName = nb2.dataset.label || nb2.textContent.trim();
   nb.textContent = `Next: ${nextName} →`;
   nb.addEventListener("click", () => showTab(TAB_ORDER[k + 1]));
   sec.appendChild(nb);
@@ -1129,23 +1265,26 @@ function buildPayload() {
 }
 const zipVal = () => { const m = ($("cZip").value || "").trim().match(/^(\d{5})(-?\d{4})?$/); return m ? m[1] : ""; };
 async function callFn(name, body) {
-  const r = await fetch(`${CONFIG.supabaseUrl}/functions/v1/${name}`, {
+  let r;
+  try { r = await fetch(`${CONFIG.supabaseUrl}/functions/v1/${name}`, {
     method: "POST", body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json", apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } });
+    headers: { "Content-Type": "application/json", apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } }); }
+  catch (e) { throw new Error("Couldn't reach the shop's checkout server. Check your connection and try again."); }
   let data = {}; try { data = await r.json(); } catch (e) {}
   if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
   return data;
 }
 function requestQuote() {
   const zip = zipVal();
-  const key = zip ? zip + JSON.stringify(buildPayload()) : "";
+  const items = cart.map(it => it.build);
+  const key = zip && items.length ? zip + JSON.stringify(items) : "";
   if (key === quote.key) return;
   clearTimeout(quoteTimer);
-  quote = { key, status: !zip ? "idle" : connected() ? "loading" : "preview", data: null, error: "" };
+  quote = { key, status: !key ? "idle" : connected() ? "loading" : "preview", data: null, error: "" };
   renderSummary();
   if (quote.status !== "loading") return;
   quoteTimer = setTimeout(async () => {
-    try { const d = await callFn("enclosure-quote", { build: buildPayload(), zip }); if (quote.key === key) quote = { key, status: "ok", data: d, error: "" }; }
+    try { const d = await callFn("enclosure-quote", { items, zip }); if (quote.key === key) quote = { key, status: "ok", data: d, error: "" }; }
     catch (err) { if (quote.key === key) quote = { key, status: "error", data: null, error: err.message }; }
     if (quote.key === key) renderSummary();
   }, 450);
@@ -1184,15 +1323,16 @@ $("orderForm").addEventListener("submit", async e => {
   if (!email && !phone) errs.push("Add an email or phone number so Oh Sure Studios can reach you.");
   else if (!emailOk) errs.push("That email address looks incomplete.");
   if (!zip) errs.push("Add your 5 digit shipping zip code.");
-  if (state.front === "plaque" && !state.plaqueName.trim()) errs.push("Type the name for the plaque, in the Front tab.");
-  if (state.front === "logo" && !logo) { errs.push("Upload your logo art, in the Front tab."); showLogoErr("Logo art is required for this option."); }
+  if (!cart.length) errs.push("Your cart is empty. Build an enclosure and tap Add to order.");
+  const missingLogo = cart.findIndex(it => it.build.front === "logo" && !(it.logo && it.logo.dataUrl));
+  if (missingLogo >= 0) errs.push(`Enclosure ${missingLogo + 1} needs its logo art again. Tap Edit on it and re-upload the logo.`);
   if (connected() && zip && quote.status === "loading") errs.push("Shipping is still loading. Try again in a second.");
   if (connected() && zip && quote.status === "error") errs.push(quote.error);
   $("formErr").hidden = !errs.length; $("formErr").textContent = errs.join(" ");
   if (errs.length) return;
 
   const notes = $("cNotes").value.trim();
-  const pre = `${name}${email ? " · " + email : ""}${phone ? " · " + phone : ""}\nShip to zip: ${zip}\n\n${summaryText()} (plus shipping)${notes ? "\n\nNotes: " + notes : ""}`;
+  const pre = `${name}${email ? " · " + email : ""}${phone ? " · " + phone : ""}\nShip to zip: ${zip}\n\n${cart.map((it, n) => `#${n + 1} ${it.summary}`).join("\n\n")}\n\nCart total: ${money(cartTotal())} (plus shipping)${notes ? "\n\nNotes: " + notes : ""}`;
   if (!connected()) {
     showResult("warn", `<b>Preview mode.</b> Checkout isn't connected yet, so nothing was charged or sent. In the live store this button opens Stripe checkout with shipping added, and this order reaches Oh Sure Studios once it's paid:`, pre);
     return;
@@ -1200,14 +1340,21 @@ $("orderForm").addEventListener("submit", async e => {
   const btn = $("sendBtn"); btn.disabled = true; btn.textContent = "Opening checkout…";
   try {
     const folder = `uploads/${(crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2))}`;
-    let previewUrl = null, logoUrl = null;
-    const shot = await snapshot();
-    if (shot) previewUrl = await sbUpload(`${folder}/preview.png`, shot, "image/png");
-    if (state.front === "logo" && logo) { const ext = (logo.file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, ""); logoUrl = await sbUpload(`${folder}/logo.${ext}`, logo.file, logo.file.type); }
-    const res = await callFn("enclosure-checkout", { build: buildPayload(), zip, customer: { name, email, phone, notes }, logoUrl, previewUrl });
+    const items = [];
+    for (let n = 0; n < cart.length; n++) {
+      const it = cart[n];
+      let previewUrl = null, logoUrl = null;
+      if (it.preview) previewUrl = await sbUpload(`${folder}/item${n + 1}-preview.jpg`, dataUrlToBlob(it.preview), "image/jpeg");
+      if (it.build.front === "logo" && it.logo) {
+        const ext = (it.logo.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+        logoUrl = await sbUpload(`${folder}/item${n + 1}-logo.${ext}`, dataUrlToBlob(it.logo.dataUrl), it.logo.type || "image/png");
+      }
+      items.push({ build: it.build, previewUrl, logoUrl });
+    }
+    const res = await callFn("enclosure-checkout", { items, zip, customer: { name, email, phone, notes } });
     window.location.href = res.url;
   } catch (err) {
-    showResult("warn", `<b>Checkout didn't open.</b> ${escapeHtml(err.message)} Nothing was charged. Your build is saved on this device, so you can try again.`, null);
+    showResult("warn", `<b>Checkout didn't open.</b> ${escapeHtml(err.message)} Nothing was charged. Your cart is saved on this device, so you can try again.`, null);
     btn.disabled = false; btn.textContent = "Continue to payment";
   }
 });
@@ -1216,6 +1363,7 @@ function handleReturn() {
   const paid = params.get("paid"), canceled = params.get("canceled");
   if (!paid && !canceled) return;
   showTab("order");
+  if (paid) { cart = []; saveCart(); renderSummary(); }
   if (paid) showResult("ok", `<b>Payment received, thank you!</b> Your order number is <b>${escapeHtml(paid.replace(/[^A-Z0-9]/gi, ""))}</b>. Stripe emailed your receipt, and Oh Sure Studios will start production soon.`, null);
   else showResult("warn", `<b>Checkout was canceled.</b> You weren't charged, and your build is still here whenever you're ready.`, null);
   try { history.replaceState(null, "", location.pathname); } catch (e) {}
