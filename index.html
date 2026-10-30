@@ -1266,9 +1266,10 @@ function buildPayload() {
 const zipVal = () => { const m = ($("cZip").value || "").trim().match(/^(\d{5})(-?\d{4})?$/); return m ? m[1] : ""; };
 async function callFn(name, body) {
   let r;
+  // Sent as a "simple" request (plain text, no extra headers) so the browser skips the CORS preflight.
+  // These functions run with JWT verification off; the server re-checks every price itself.
   try { r = await fetch(`${CONFIG.supabaseUrl}/functions/v1/${name}`, {
-    method: "POST", body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json", apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } }); }
+    method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain;charset=UTF-8" } }); }
   catch (e) { throw new Error("Couldn't reach the shop's checkout server. Check your connection and try again."); }
   let data = {}; try { data = await r.json(); } catch (e) {}
   if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
