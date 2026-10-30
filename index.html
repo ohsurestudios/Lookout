@@ -198,7 +198,14 @@ button { cursor: pointer; }
 .fontopt .fs { font-size: 1.35rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fontopt .fl { font-size: .7rem; color: var(--muted); }
 .fontopt[aria-pressed="true"] { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
-.minisw { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+.minisw { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; }
+.addcolor { margin-top: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.scrollhint { position: sticky; bottom: 6px; justify-self: center; z-index: 4; display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border-radius: 999px; border: 1px solid var(--pink); background: rgba(21,16,39,.94); color: var(--fg); font: inherit; font-size: .76rem; font-weight: 700; box-shadow: 0 0 14px rgba(255,63,208,.45); cursor: pointer; animation: hintbob 1.6s ease-in-out infinite; transition: opacity .2s; }
+.scrollhint.off { opacity: 0; pointer-events: none; }
+@keyframes hintbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .scrollhint { animation: none; } }
+.codeRow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; margin-top: 8px; }
+.codeRow input { letter-spacing: .25em; font-family: var(--mono); text-align: center; }
 .minisw button { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); padding: 0; }
 .minisw button[aria-pressed="true"] { outline: 2px solid var(--lime); outline-offset: 2px; }
 
@@ -439,11 +446,13 @@ button { cursor: pointer; }
         <div class="section-head"><h2>Walls</h2><span class="tag">Clear acrylic is standard</span></div>
         <p class="note">Swap any wall except the door for a solid printed panel. Good for shy spiders or a darker corner.</p>
         <div class="walls" id="wallList"></div>
+        <div class="field addcolor" id="wallColorField" hidden><label>Solid wall color: <span id="wallColorName" style="color:var(--pink)"></span></label><div class="minisw" id="wallSw"></div></div>
       </section>
 
 <section class="section" id="addons" data-search="add ons humidity false floor tray shelf multiple enclosures">
         <div class="section-head"><h2>Add ons</h2></div>
         <div class="opts" id="floorOpts"></div>
+        <div class="field addcolor" id="floorColorField" hidden><label>Floor color: <span id="floorColorName" style="color:var(--pink)"></span></label><div class="minisw" id="floorSw"></div></div>
         <p class="note" id="trayNote" hidden>Shelf trays are made for the Mini and Slim sizes.</p>
         <div class="section-head" id="trayHead" style="margin-top:4px"><h2 style="font-size:.9rem">Shelf tray</h2><span class="tag">Enclosures snap down onto it</span></div>
         <div class="opts" id="trayOpts"></div>
@@ -451,6 +460,7 @@ button { cursor: pointer; }
           <span style="font-size:.88rem">How many trays?</span>
           <div class="stepper"><button id="trayMinus" aria-label="One fewer tray">−</button><output id="trayQty">1</output><button id="trayPlus" aria-label="One more tray">+</button></div>
         </div>
+        <div class="field addcolor" id="trayColorField" hidden><label>Tray color: <span id="trayColorName" style="color:var(--pink)"></span></label><div class="minisw" id="traySw"></div></div>
         <div class="qtyrow qtymain">
           <span><b>How many of this exact enclosure?</b></span>
           <div class="stepper"><button id="qtyMinus" aria-label="One fewer">−</button><output id="qty">1</output><button id="qtyPlus" aria-label="One more">+</button></div>
@@ -495,6 +505,7 @@ button { cursor: pointer; }
       <section class="section" id="account" data-search="account sign in my orders">
         <div id="acctBody"></div>
       </section>
+      <button type="button" class="scrollhint off" id="scrollHint" aria-label="Scroll down for more options">More below <span aria-hidden="true">↓</span></button>
     </div>
 
     <div class="navbar" id="navbar">
@@ -784,6 +795,9 @@ function renderWalls() {
     });
     box.appendChild(row);
   });
+  const anySolid = solidCount() > 0;
+  $("wallColorField").hidden = !anySolid;
+  if (anySolid) miniSwatches("wallSw", "wallColorName", "walls");
 }
 function renderAddons() {
   const f = $("floorOpts"); f.innerHTML = "";
@@ -800,6 +814,11 @@ function renderAddons() {
   t.hidden = !traysOk; $("trayHead").hidden = !traysOk; $("trayNote").hidden = traysOk;
   $("trayQtyRow").hidden = !traysOk || state.tray === "none";
   $("trayQty").textContent = state.trayQty;
+  $("floorColorField").hidden = !state.floor;
+  if (state.floor) miniSwatches("floorSw", "floorColorName", "floor");
+  const trayOn = traysOk && state.tray !== "none";
+  $("trayColorField").hidden = !trayOn;
+  if (trayOn) miniSwatches("traySw", "trayColorName", "tray");
 }
 function renderBuild() {
   $("qty").textContent = state.qty;
@@ -1018,6 +1037,7 @@ function go(mode, step = 0) {
   if (id === "cart") renderSummary();
   if (id !== "account") showOrderScene(null);
   renderNav();
+  requestAnimationFrame(updateScrollHint);
 }
 function renderNav() {
   const flow = FLOWS[view.mode], sb = $("stepbar");
@@ -1066,7 +1086,16 @@ $("searchBtn").addEventListener("click", () => {
 $("searchClose").addEventListener("click", () => { $("search").value = ""; applySearch(); $("searchRow").hidden = true; $("searchBtn").setAttribute("aria-pressed", "false"); renderNav(); });
 const bq = d => { state.qty = Math.max(PRICES.bulkMin, Math.min(50, state.qty + d)); changed(); };
 $("bqMinus").onclick = () => bq(-10); $("bqMinus1").onclick = () => bq(-1); $("bqPlus1").onclick = () => bq(1); $("bqPlus").onclick = () => bq(10);
-function renderAll() { renderSize(); renderZones(); renderSwatches(); renderFront(); renderWalls(); renderAddons(); renderBuild(); renderSummary(); applySearch(); lockForBulk(); renderNav(); }
+function updateScrollHint() {
+  const pane = $("sectionsPane"), h = $("scrollHint"); if (!pane || !h) return;
+  const more = pane.scrollHeight - pane.clientHeight - pane.scrollTop > 40;
+  h.classList.toggle("off", !more);
+}
+$("sectionsPane").addEventListener("scroll", updateScrollHint, { passive: true });
+window.addEventListener("resize", updateScrollHint);
+if (window.ResizeObserver) new ResizeObserver(updateScrollHint).observe($("sectionsPane"));
+$("scrollHint").addEventListener("click", () => { const pane = $("sectionsPane"); pane.scrollBy({ top: pane.clientHeight * 0.7, behavior: "smooth" }); });
+function renderAll() { renderSize(); renderZones(); renderSwatches(); renderFront(); renderWalls(); renderAddons(); renderBuild(); renderSummary(); applySearch(); lockForBulk(); renderNav(); requestAnimationFrame(updateScrollHint); }
 function changed() { enforceBulk(); save(); renderAll(); updateScene(); }
 function lockForBulk() {
   $("colorReqField").hidden = state.bulk;
@@ -1794,6 +1823,9 @@ function initAuth() {
   try {
     sb = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
     sb.auth.getSession().then(({ data }) => { session = data.session; afterAuthChange(); });
+    const recheck = () => { if (!document.hidden && !session) sb.auth.getSession().then(({ data }) => { if (data.session) { session = data.session; afterAuthChange(); } }); };
+    document.addEventListener("visibilitychange", recheck); window.addEventListener("focus", recheck);
+    window.addEventListener("storage", e => { if (e.key && /^sb-.*-auth-token$/.test(e.key)) recheck(); });
     sb.auth.onAuthStateChange((evt, sess) => {
       session = sess; afterAuthChange();
       if (evt === "SIGNED_IN" && /access_token|type=magiclink/.test(location.hash)) { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} }
@@ -1812,10 +1844,28 @@ async function sendLink(email, statusEl) {
   statusEl.textContent = "Sending…"; statusEl.className = "";
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
   if (error) { statusEl.textContent = `Couldn't send the link: ${error.message}`; statusEl.className = "errmsg"; return; }
-  statusEl.innerHTML = `Check <b>${escapeHtml(email)}</b> for a sign in link. Open it on this device and you'll land right back here.`; statusEl.className = "ok";
+  const pre = statusEl.id.replace(/Status$/, "");
+  statusEl.className = "ok";
+  statusEl.innerHTML = `Check <b>${escapeHtml(email)}</b>. Tap the link in the email, <b>or type the code from the email here</b> (best on iPhone):
+    <div class="codeRow"><input id="${pre}Code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code" aria-label="Code from the email"><button type="button" id="${pre}Verify">Sign in</button></div>
+    <div id="${pre}CodeMsg" aria-live="polite"></div>
+    <button type="button" class="linkbtn" id="${pre}Again" style="margin-top:6px">Send again or use a different email</button>`;
+  try { localStorage.setItem("ossPendingEmail", email); } catch (e) {}
+  const verify = async () => {
+    const code = ($(pre + "Code").value || "").replace(/\D/g, ""), msg = $(pre + "CodeMsg");
+    if (code.length < 6) { msg.textContent = "Type the whole code from the email."; msg.className = "errmsg"; return; }
+    msg.textContent = "Checking…"; msg.className = "";
+    let { error } = await sb.auth.verifyOtp({ email, token: code, type: "email" });
+    if (error) ({ error } = await sb.auth.verifyOtp({ email, token: code, type: "magiclink" }));
+    if (error) { msg.textContent = "That code didn't work. It may have expired, so tap Send again for a new one."; msg.className = "errmsg"; return; }
+    try { localStorage.removeItem("ossPendingEmail"); } catch (e) {}
+  };
+  $(pre + "Verify").onclick = verify;
+  $(pre + "Code").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); verify(); } });
+  $(pre + "Again").onclick = () => { statusEl.innerHTML = ""; statusEl.className = ""; const inp = $(pre + "Email"); inp.value = email; inp.focus(); };
 }
 function signInBlock(prefix, lead) {
-  return `<div>${lead}</div><div class="row2"><input id="${prefix}Email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email"><button type="button" id="${prefix}Send">Email me a link</button></div><div id="${prefix}Status" aria-live="polite"></div>`;
+  return `<div>${lead}</div><div class="row2"><input id="${prefix}Email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email"><button type="button" id="${prefix}Send">Email me a code</button></div><div id="${prefix}Status" aria-live="polite"></div>`;
 }
 function wireSignIn(prefix) {
   const send = () => sendLink($(prefix + "Email").value.trim(), $(prefix + "Status"));
@@ -1827,7 +1877,7 @@ function renderSignGate() {
   if (!connected()) { g.hidden = true; return; }
   if (session) { g.hidden = false; g.innerHTML = `<div>Signed in as <b>${escapeHtml(session.user.email)}</b>. Your order will show up in My orders.</div>`; return; }
   g.hidden = false;
-  g.innerHTML = signInBlock("gate", "<b>Sign in to check out.</b> We'll email you a link, no password needed. Your cart stays saved while you check your email.");
+  g.innerHTML = signInBlock("gate", "<b>Sign in to check out.</b> We'll email you a sign in code, no password needed. Your cart stays saved while you check your email.");
   wireSignIn("gate");
 }
 
@@ -1913,7 +1963,7 @@ function renderAccount(keepScroll) {
   const box = $("acctBody");
   if (!connected()) { box.innerHTML = `<div class="acct"><h2>My account</h2><p class="note">Accounts work on the live site. In this preview there's nothing to sign in to.</p></div>`; showOrderScene(null); return; }
   if (!session) {
-    box.innerHTML = `<div class="acct"><h2>Sign in</h2><div class="signgate">${signInBlock("acct", "Enter your email and we'll send you a sign in link, no password needed. You'll need an account to check out and to follow your orders.")}</div></div>`;
+    box.innerHTML = `<div class="acct"><h2>Sign in</h2><div class="signgate">${signInBlock("acct", "Enter your email and we'll send you a sign in code, no password needed. You'll need an account to check out and to follow your orders.")}</div></div>`;
     wireSignIn("acct"); showOrderScene(null); return;
   }
   startOrdersPolling();
