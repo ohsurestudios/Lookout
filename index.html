@@ -307,8 +307,14 @@ button { cursor: pointer; }
 .spill.s2 { color: var(--pink); border-color: var(--pink); }
 .spill.s3 { color: #b14bff; border-color: #b14bff; }
 .spill.s4 { color: var(--cyan); border-color: var(--cyan); }
-.spill.s5 { color: #10180a; background: var(--lime); border-color: var(--lime); }
-.tracker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.spill.s5 { color: var(--lime); border-color: var(--lime); }
+.spill.s6 { color: #10180a; background: var(--lime); border-color: var(--lime); }
+.tracker { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.track { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; }
+.track code { font-size: .82rem; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .15rem .45rem; word-break: break-all; }
+.plist { display: flex; flex-wrap: wrap; gap: .35rem; }
+.plist span { font-size: .7rem; border-radius: 999px; padding: .15rem .5rem; border: 1px solid var(--line); color: var(--muted); }
+.plist span.on { color: #10180a; background: var(--lime); border-color: var(--lime); font-weight: 700; }
 .tracker .tk { display: grid; justify-items: center; gap: 4px; text-align: center; font-size: .66rem; color: var(--muted); }
 .tracker .tk .b { width: 100%; height: 6px; border-radius: 4px; background: var(--line); }
 .tracker .tk.done .b { background: var(--cyan); }
@@ -1366,7 +1372,7 @@ function frameDist() {
 }
 function setView(v, instant) {
   const d = frameDist();
-  const target = new THREE.Vector3(0, (MODEL_DATA.meta[state.size].Hp + 5) / 2 + (viewBoost > 1.5 ? 45 : 0), 0);
+  const target = new THREE.Vector3(0, (MODEL_DATA.meta[state.size].Hp + 5) / 2 + (viewBoost > 1.5 ? 45 : 0) + viewLift, 0);
   const dirs = { front: [0, 0.18, 1], angle: [0.72, 0.42, 1], top: [0.001, 1, 0.35] };
   const dir = new THREE.Vector3(...dirs[v]).normalize().multiplyScalar(d);
   const to = target.clone().add(dir);
@@ -1383,15 +1389,28 @@ $("vSpin").onclick = e => { controls.autoRotate = !controls.autoRotate; controls
 
 /* ---------------- order stage animations ---------------- */
 let orderAnim = null;
-let viewBoost = 1;            // { build, stage, t0, extras: THREE.Group, flaps, box, sparkles, nozzle }
+let viewBoost = 1, viewLift = 0; // { build, stage, t0, extras, local, box, sparkles, nozzle, spider, rag, ... }
 const printClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 const savedClips = new Map();
 function addPrintClip() { Object.values(mats).forEach(m => { if (!savedClips.has(m)) savedClips.set(m, m.clippingPlanes); m.clippingPlanes = [...(m.clippingPlanes || []), printClip]; }); }
 function removePrintClip() { savedClips.forEach((v, m) => { m.clippingPlanes = v; }); savedClips.clear(); }
 function resetUnitPoses() {
-  units.forEach(u => { const p = u.userData.p; p.lidGroup.position.set(0, 0, 0); p.sky.position.set(0, 0, 0); p.frame.position.set(0, 0, 0); p.doorGroup.position.set(0, 0, 0); p.frontGroup.position.set(0, 0, 0); });
-  if (root) { root.visible = true; root.position.y = 0; }
+  units.forEach(u => { const p = u.userData.p; [p.lidGroup, p.sky, p.frame, p.doorGroup, p.frontGroup, p.floor, p.base, p.posts, p.bodyEdges, ...Object.values(p.clear), ...Object.values(p.solid)].forEach(o => o.position.set(0, 0, 0)); p.doorGroup.children.forEach(c => c.position.set(0, 0, 0)); });
+  if (root) { root.visible = true; root.position.y = 0; root.scale.setScalar(1); }
 }
+// Ghosting: unprinted parts turn see-through. Originals are kept so they can be put back.
+const ghosted = [];
+function ghost(obj) {
+  obj.traverse(o => {
+    if (o.isLineSegments) { if (o.material === mats.edge) { ghosted.push({ o, mat: o.material }); o.material = ghostEdge; } return; }
+    if (!o.isMesh || o.material === mats.acrylic || o.material === mats.plaqueText || o.material === mats.sticker) return;
+    const m = o.material.clone(); m.transparent = true; m.opacity = 0.3; m.depthWrite = false;
+    ghosted.push({ o, mat: o.material }); o.material = m;
+  });
+}
+const ghostEdge = new THREE.LineBasicMaterial({ color: 0xff7be6, transparent: true, opacity: 0.6 });
+function unghostAll() { ghosted.forEach(g => { if (g.o.material !== ghostEdge) g.o.material.dispose(); g.o.material = g.mat; }); ghosted.length = 0; }
+
 function cardboard(hex) { return new THREE.MeshStandardMaterial({ color: hex, roughness: 0.95, metalness: 0 }); }
 function makeBox() {
   const W = 100, H = 176, D = 146, t = 2, g = new THREE.Group(), cb = cardboard(0xc49a6c), cbIn = cardboard(0xa87f55);
@@ -1416,11 +1435,11 @@ function makeBox() {
   return { group: g, flaps, tape, H };
 }
 function setFlaps(box, k) { box.flaps.forEach(f => { f.piv.rotation[f.axis] = f.open * (1 - k); }); }
-function makeSparkles() {
-  const n = 60, pos = new Float32Array(n * 3);
+function makeSparkles(n = 60, color = 0xc6ff3d, size = 4) {
+  const pos = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - 0.5) * 140; pos[i * 3 + 1] = Math.random() * 190; pos[i * 3 + 2] = (Math.random() - 0.5) * 170; }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  return new THREE.Points(g, new THREE.PointsMaterial({ color: 0xc6ff3d, size: 4, transparent: true, opacity: 0.9, depthWrite: false }));
+  return new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.9, depthWrite: false }));
 }
 function makeNozzle() {
   const g = new THREE.Group();
@@ -1431,14 +1450,132 @@ function makeNozzle() {
   const glow = new THREE.PointLight(0xff7be6, 0.9, 80); glow.position.y = 2; g.add(glow);
   return g;
 }
+// Confetti for the unboxing
+function makeConfetti(n = 90) {
+  const g = new THREE.Group(), cols = [0xff3fd0, 0xc6ff3d, 0x3de0ff, 0xffd23f, 0xb14bff];
+  const geo = new THREE.PlaneGeometry(6, 9);
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, transparent: true }));
+    m.userData = { vx: (Math.random() - 0.5) * 200, vy: 160 + Math.random() * 200, vz: (Math.random() - 0.5) * 200, sp: Math.random() * 10 };
+    g.add(m);
+  }
+  return g;
+}
+function tickConfetti(g, t) { // t = seconds since burst
+  g.children.forEach(m => {
+    const d = m.userData, tt = Math.max(0, t);
+    m.position.set(d.vx * tt, 180 + d.vy * tt - 260 * tt * tt, d.vz * tt);
+    m.rotation.set(d.sp * tt, d.sp * 1.3 * tt, 0);
+    m.visible = t > 0 && m.position.y > 0;
+    m.material.opacity = Math.max(0, 1 - t / 3.2);
+  });
+}
+
+// A friendly crowned jumping spider built from simple shapes. Faces +X, feet on y = 0, about 2 units long.
+function limb(a, b, r, mat) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), L = d.length();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, L, 10), mat);
+  m.position.copy(A).addScaledVector(d, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  return m;
+}
+function makeSpider() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const fur = new THREE.MeshStandardMaterial({ color: 0x1d1428, roughness: 0.85 });
+  const fur2 = new THREE.MeshStandardMaterial({ color: 0x2c1a44, roughness: 0.8 });
+  const pink = new THREE.MeshStandardMaterial({ color: 0xff3fd0, roughness: 0.6, emissive: 0x3a0030 });
+  const lime = new THREE.MeshStandardMaterial({ color: 0xc6ff3d, roughness: 0.6, emissive: 0x1a2a00 });
+  const eyeW = new THREE.MeshStandardMaterial({ color: 0x0b0b12, roughness: 0.08, metalness: 0.3 });
+  const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 0.75, roughness: 0.3 });
+  const sph = (r, m, x, y, z, sx = 1, sy = 1, sz = 1) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); body.add(o); return o; };
+  sph(0.55, fur, 0.5, 0.78, 0, 1.05, 0.85, 1);                 // head (cephalothorax)
+  sph(0.72, fur2, -0.72, 0.88, 0, 1.3, 0.92, 1);               // abdomen
+  sph(0.2, pink, -0.62, 1.42, 0, 2.2, 0.35, 1.2);              // pink stripe on the back
+  [-0.35, -0.95].forEach(x => [-1, 1].forEach(s => sph(0.09, lime, x, 1.25, s * 0.42)));
+  [-1, 1].forEach(s => {                                       // the big front eyes, with sparkle
+    sph(0.21, eyeW, 1.0, 0.86, s * 0.2);
+    sph(0.06, shine, 1.17, 0.95, s * 0.24);
+    sph(0.1, eyeW, 0.96, 0.96, s * 0.43);
+    sph(0.06, eyeW, 0.65, 1.2, s * 0.36);
+  });
+  sph(0.08, pink, 1.02, 0.5, 0.13); sph(0.08, pink, 1.02, 0.5, -0.13); // little pedipalp tips
+  body.add(limb([0.95, 0.65, 0.13], [1.04, 0.5, 0.13], 0.06, fur), limb([0.95, 0.65, -0.13], [1.04, 0.5, -0.13], 0.06, fur));
+  const crown = new THREE.Group(); crown.position.set(0.45, 1.27, 0); crown.rotation.z = -0.25; body.add(crown);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.13, 20, 1, true), gold); band.material.side = THREE.DoubleSide; crown.add(band);
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, c = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 8), gold); c.position.set(Math.cos(a) * 0.24, 0.14, Math.sin(a) * 0.24); crown.add(c);
+    const j = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), i % 2 ? pink : lime); j.position.set(Math.cos(a) * 0.255, 0.02, Math.sin(a) * 0.255); crown.add(j); }
+  const legs = [], base = [0.95, 0.35, -0.3, -0.9];
+  [1, -1].forEach(side => base.forEach((ang, i) => {
+    const piv = new THREE.Group(); piv.position.set(0.82 - i * 0.24, 0.72, side * 0.3);
+    const up = [0, 0.48, side * 0.78], foot = [0, -0.72, side * (1.22 - (i === 0 ? 0.1 : 0))];
+    piv.add(limb([0, 0, 0], up, 0.075, fur), limb(up, foot, 0.06, fur));
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), i === 0 ? pink : fur); knee.position.set(...up); piv.add(knee);
+    piv.userData = { base: side * ang, side, i, y0: 0.72 };
+    piv.rotation.order = "YXZ"; piv.rotation.y = side * ang;
+    body.add(piv); legs.push(piv);
+  }));
+  return { group: g, body, legs, crown };
+}
+// Walk cycle: legs swing in two alternating groups, the body bobs.
+function spiderWalk(sp, t, speed = 1) {
+  sp.legs.forEach(l => {
+    const d = l.userData, ph = t * 9 * speed + (((d.i + (d.side > 0 ? 0 : 1)) % 2) ? Math.PI : 0);
+    l.rotation.y = d.base + Math.sin(ph) * 0.28 * d.side; l.rotation.x = 0;
+    l.position.y = d.y0 + Math.max(0, Math.cos(ph)) * 0.14;
+  });
+  sp.body.position.y = Math.abs(Math.sin(t * 9 * speed)) * 0.05;
+}
+function spiderStand(sp, t) { sp.legs.forEach(l => { l.rotation.y = l.userData.base; l.rotation.x = 0; l.position.y = l.userData.y0; }); sp.body.position.y = Math.sin(t * 2) * 0.02; }
+function spiderWave(sp, t) {
+  spiderStand(sp, t);
+  const l = sp.legs.find(x => x.userData.i === 0 && x.userData.side < 0); // the front leg on the camera's right
+  l.rotation.x = 1.25 + Math.sin(t * 11) * 0.3; l.rotation.y = l.userData.base - 0.5 + Math.sin(t * 11) * 0.25;
+  sp.crown.rotation.x = Math.sin(t * 5.5) * 0.08;
+}
+
+// Cleaning rag for the finishing stage
+function makeRag() {
+  const geo = new THREE.PlaneGeometry(30, 24, 10, 8), m = new THREE.MeshStandardMaterial({ color: 0x5fd0ff, roughness: 1, side: THREE.DoubleSide });
+  const rag = new THREE.Mesh(geo, m); rag.userData.p0 = Float32Array.from(geo.attributes.position.array);
+  return rag;
+}
+function wrinkle(rag, t) {
+  const pos = rag.geometry.attributes.position, p0 = rag.userData.p0;
+  for (let i = 0; i < pos.count; i++) { const x = p0[i * 3], y = p0[i * 3 + 1]; pos.setZ(i, Math.sin(x * 0.35 + t * 3) * 1.6 + Math.cos(y * 0.5 - t * 2) * 1.4 + (Math.abs(x) > 12 ? 2.5 : 0)); }
+  pos.needsUpdate = true; rag.geometry.computeVertexNormals();
+}
+
+// Exploded layout: where each part waits (unit coordinates, mm, Z up, door at Y = 0)
+function explodeMap(p) {
+  return [
+    [p.lidGroup, [0, 0, 45]], [p.sky, [0, 0, 70]], [p.frame, [0, 0, 95]],
+    [p.doorGroup, [0, -70, 0]], [p.frontGroup, [0, -110, -6]],
+    [p.solid.back, [0, 70, 0]], [p.clear.back, [0, 70, 0]],
+    [p.solid.left, [-70, 0, 0]], [p.clear.left, [-70, 0, 0]],
+    [p.solid.right, [70, 0, 0]], [p.clear.right, [70, 0, 0]],
+    [p.floor, [0, 0, 48]],
+  ];
+}
+// Which on screen parts each plate in OSS 3D Orders makes. Parts without their own plate print with the base.
+function partsByKind(p, kinds) {
+  const has = k => kinds.includes(k);
+  const main = [p.base, p.posts, p.bodyEdges];
+  if (!has("lid")) main.push(p.lidGroup);
+  if (!has("frame")) main.push(p.frame);
+  if (!has("door")) main.push(p.doorGroup.children[0]);
+  return { main, lid: [p.lidGroup], frame: [p.frame], door: [p.doorGroup.children[0]], back: [p.solid.back], sides: [p.solid.left, p.solid.right], floor: [p.floor], plaque: [p.plaque], tray: [] };
+}
 const easeIO = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const clamp01 = k => Math.max(0, Math.min(1, k));
 function showOrderScene(o) {
   if (!renderer) return;
   if (orderAnim) {
     if (orderAnim.extras) scene.remove(orderAnim.extras);
-    removePrintClip(); resetUnitPoses(); grid.position.x = 0;
+    if (orderAnim.local && orderAnim.local.parent) orderAnim.local.parent.remove(orderAnim.local);
+    unghostAll(); removePrintClip(); resetUnitPoses(); grid.position.x = 0;
     controls.autoRotate = $("vSpin").getAttribute("aria-pressed") === "true";
-    orderAnim = null; $("stageBadge").hidden = true; viewBoost = 1;
+    orderAnim = null; $("stageBadge").hidden = true; viewBoost = 1; viewLift = 0;
     lastLayout = ""; updateScene();
   }
   if (!o || !o.build) return;
@@ -1446,14 +1583,55 @@ function showOrderScene(o) {
   if (!AVAILABLE_SIZES.includes(b.size)) b.size = "shelf";
   lastLayout = ""; withState(b, updateScene);
   const extras = new THREE.Group(); scene.add(extras);
-  orderAnim = { build: b, stage: o.stage, t0: performance.now() / 1000, extras };
-  if (o.stage === 1) { addPrintClip(); orderAnim.nozzle = makeNozzle(); extras.add(orderAnim.nozzle); }
-  if (o.stage === 2) { orderAnim.sparkles = makeSparkles(); extras.add(orderAnim.sparkles); }
-  if (o.stage === 3 || o.stage === 4) { orderAnim.box = makeBox(); extras.add(orderAnim.box.group); }
-  controls.autoRotate = o.stage === 0 || o.stage === 2; controls.autoRotateSpeed = 1.2;
+  const local = new THREE.Group(); units[0] && units[0].add(local);
+  const a = orderAnim = { build: b, stage: o.stage, t0: performance.now() / 1000, extras, local };
+  const p = units[0] && units[0].userData.p;
+  if (o.stage === 1 && p) {
+    const plates = (o.plates || []).filter(x => x.kind !== "tray");
+    if (!plates.length) { a.mode = "clip"; addPrintClip(); a.nozzle = makeNozzle(); extras.add(a.nozzle); }
+    else {
+      a.mode = "explode";
+      const kinds = [...new Set(plates.map(x => x.kind))];
+      const printedK = new Set(kinds.filter(k => plates.filter(x => x.kind === k).every(x => x.printed)));
+      const allDone = printedK.size === kinds.length;
+      const groups = partsByKind(p, kinds);
+      const printedObjs = new Set(), waiting = [];
+      kinds.forEach(k => (groups[k] || []).forEach(obj => { if (printedK.has(k)) printedObjs.add(obj); else { ghost(obj); waiting.push(obj); } }));
+      // Moves: printed parts glide home, waiting parts float in the exploded spot. Acrylic slides in once everything is printed.
+      a.moves = [];
+      const isAcrylic = obj => [p.sky, p.clear.back, p.clear.left, p.clear.right].includes(obj);
+      explodeMap(p).forEach(([obj, off]) => {
+        const home = isAcrylic(obj) ? allDone : (obj === p.doorGroup ? (printedK.has(kinds.includes("door") ? "door" : "main")) : obj === p.frontGroup ? (!kinds.includes("plaque") || printedK.has("plaque")) : printedObjs.has(obj));
+        a.moves.push({ obj, off, home });
+      });
+      // The base itself also floats a little when it isn't printed yet
+      if (!printedK.has("main")) [p.base, p.posts].forEach(obj => a.moves.push({ obj, off: [0, 0, -8], home: false }));
+      a.allDone = allDone;
+      if (!allDone) {
+        a.nozzle = makeNozzle(); a.nozzle.scale.setScalar(0.8); extras.add(a.nozzle);
+        const target = waiting[0]; a.nozzleOver = target;
+      }
+      a.sparkles = makeSparkles(40, 0xff7be6, 3); extras.add(a.sparkles);
+    }
+  }
+  if (o.stage === 2 && p) {
+    a.rag = makeRag(); a.rag.rotation.x = Math.PI / 2; local.add(a.rag);
+    const M = MODEL_DATA.meta[b.size], Hs = M.Hp - 22.7;
+    a.glass = { x0: 9.2, x1: M.W - 9.2, z0: M.Hp + 4 - Hs, z1: M.Hp + 4 };
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(7, Hs * 1.15), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    gl.rotation.x = Math.PI / 2; gl.rotation.y = 0.5; a.glint = gl; local.add(gl);
+    a.sparkles = makeSparkles(26, 0xffffff, 3.5); extras.add(a.sparkles);
+  }
+  if (o.stage >= 3) { a.box = makeBox(); extras.add(a.box.group); }
+  if (o.stage >= 4) {
+    a.spider = makeSpider(); a.spider.group.scale.setScalar(92); extras.add(a.spider.group);
+  }
+  if (o.stage === 5) { a.confetti = makeConfetti(); extras.add(a.confetti); }
+  controls.autoRotate = o.stage === 0 || (o.stage === 1 && a.mode === "explode"); controls.autoRotateSpeed = 1.0;
   $("stageBadge").textContent = STAGES[o.stage].head; $("stageBadge").hidden = false;
-  viewBoost = o.stage === 3 ? 1.75 : o.stage === 4 ? 1.45 : 1;
-  setView("angle");
+  viewBoost = o.stage === 1 && a.mode === "explode" ? 1.3 : o.stage === 3 ? 1.75 : o.stage >= 4 ? 2.3 : 1;
+  viewLift = o.stage >= 4 ? 40 : 0;
+  setView(o.stage === 2 ? "front" : "angle");
 }
 function tickOrderAnim(now) {
   const a = orderAnim, t = now - a.t0, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1463,29 +1641,80 @@ function tickOrderAnim(now) {
     p.lidGroup.position.z = 14 + k * 10; p.sky.position.z = 14 + k * 10; p.frame.position.z = 14 + k * 10;
     p.doorGroup.position.y = -10 - k * 6;
     root.position.y = reduce ? 0 : Math.sin(t * 1.2) * 4;
-  } else if (a.stage === 1) {                // Printing: grows layer by layer under a moving nozzle
+  } else if (a.stage === 1 && a.mode === "clip") {   // Printing (no plate info yet): grows layer by layer
     const cyc = 7, k = reduce ? 1 : Math.min(1, (t % cyc) / (cyc - 1.2));
     const h = 2 + k * 158;
     printClip.constant = h;
     const nx = Math.sin(t * 9) * 32, nz = Math.cos(t * 5.3) * 52;
     a.nozzle.position.set(nx, h + 1, nz); a.nozzle.visible = k < 1;
-  } else if (a.stage === 2) {                // Finishing: parts fly in and click together, sparkles
-    const cyc = 4.5, raw = reduce ? 1 : Math.min(1, (t % cyc) / 2.6), k = easeIO(raw), e = 1 - k;
-    p.lidGroup.position.z = 50 * e; p.sky.position.z = 75 * e; p.frame.position.z = 95 * e;
-    p.doorGroup.position.set(0, -45 * e, 18 * e); p.frontGroup.position.y = -60 * e;
-    const sp = a.sparkles; sp.material.opacity = raw >= 1 ? 0.5 + 0.5 * Math.sin(t * 8) : 0.25; sp.rotation.y = t * 0.4;
+  } else if (a.stage === 1) {                // Printing with plates: exploded view, printed parts snap home
+    const k = reduce ? 1 : easeIO(clamp01((t - 0.6) / 1.8));
+    a.moves.forEach((m, i) => {
+      const bob = reduce ? 0 : Math.sin(t * 1.5 + i) * 3;
+      const f = m.home ? 1 - k : 1;
+      m.obj.position.set(m.off[0] * f, m.off[1] * f, m.off[2] * f + (m.home ? 0 : bob));
+    });
+    if (a.nozzle && a.nozzleOver) {
+      a.nozzleOver.updateWorldMatrix(true, true);
+      const bx = new THREE.Box3().setFromObject(a.nozzleOver), c = bx.getCenter(new THREE.Vector3());
+      a.nozzle.position.set(c.x + Math.sin(t * 7) * 14, bx.max.y + 8 + Math.sin(t * 2) * 2, c.z + Math.cos(t * 4.6) * 14);
+    }
+    a.sparkles.material.opacity = a.allDone ? 0.5 + 0.5 * Math.sin(t * 6) : 0.25; a.sparkles.rotation.y = t * 0.3;
+  } else if (a.stage === 2) {                // Finishing: a rag polishes the door glass, then it gleams
+    const G = a.glass, cx = (G.x0 + G.x1) / 2, cz = (G.z0 + G.z1) / 2, rx = (G.x1 - G.x0) * 0.3, rz = (G.z1 - G.z0) * 0.3;
+    const cyc = 5, u = reduce ? 4 : t % cyc, wiping = u < 3.4;
+    const sw = t * 3.2;
+    a.rag.position.set(cx + Math.sin(sw) * rx, -7 - (wiping ? 0 : (u - 3.4) * 25), cz + Math.cos(sw * 2) * rz * 0.6 + Math.sin(t * 0.9) * rz * 0.5);
+    a.rag.rotation.y = Math.sin(sw) * 0.35;
+    if (!reduce) wrinkle(a.rag, t);
+    a.rag.visible = wiping || u < 4.2;
+    const gk = clamp01((u - 3.5) / 1.2);
+    a.glint.position.set(G.x0 + (G.x1 - G.x0) * gk, -4, cz);
+    a.glint.material.opacity = u > 3.5 ? Math.sin(gk * Math.PI) * 0.85 : 0;
+    a.sparkles.material.opacity = u > 3.5 ? 0.4 + 0.5 * Math.sin(t * 9) : 0.08; a.sparkles.rotation.y = t * 0.4;
   } else if (a.stage === 3) {                // Packaging: lowered into a box, flaps fold shut
     const cyc = 6, u = reduce ? 1 : (t % cyc);
     const drop = Math.max(0, 1 - u / 2), fold = Math.min(1, Math.max(0, (u - 2.2) / 1.6));
     root.position.y = 130 * easeIO(drop) + 4;
     setFlaps(a.box, easeIO(fold)); a.box.tape.visible = fold >= 1;
-  } else if (a.stage === 4) {                // Shipped: sealed box bouncing down the road
+  } else if (a.stage === 4) {                // Shipped: riding on the spider's back across the grid
     root.visible = false; setFlaps(a.box, 1); a.box.tape.visible = true;
+    const sp = a.spider; sp.group.position.set(reduce ? 0 : Math.sin(t * 0.5) * 20, 0, 0); sp.group.rotation.y = 0;
+    if (reduce) spiderStand(sp, 0); else spiderWalk(sp, t);
     const g = a.box.group;
-    g.position.y = reduce ? 0 : Math.abs(Math.sin(t * 5)) * 14;
-    g.position.x = reduce ? 0 : Math.sin(t * 0.7) * 25;
-    g.rotation.z = reduce ? 0 : Math.sin(t * 5) * 0.06;
-    grid.position.x = reduce ? 0 : -((t * 90) % 25);
+    g.rotation.set(0, Math.PI / 2, reduce ? 0 : Math.sin(t * 9) * 0.03);
+    g.position.set(sp.group.position.x - 50, 92 * (1.52 + sp.body.position.y), 0);
+    grid.position.x = reduce ? 0 : -((t * 110) % 25);
+  } else if (a.stage === 5) {                // Delivered: spider sets the box down, waves goodbye, then the unboxing
+    const cyc = 13, u = reduce ? 12 : t % cyc, sp = a.spider, g = a.box.group, S = 92;
+    grid.position.x = 0;
+    if (u < 1.6) {                            // walk in carrying the box, set it down
+      const k = easeIO(clamp01(u / 1.6));
+      sp.group.position.set(-260 * (1 - k) + 170 * clamp01((u - 0.9) / 0.7), 0, 0); sp.group.rotation.y = 0;
+      spiderWalk(sp, t);
+      const ride = 1 - clamp01((u - 0.9) / 0.7);
+      g.position.set((-260 * (1 - k) - 50) * ride, S * 1.52 * ride, 0); g.rotation.set(0, Math.PI / 2 * ride, 0);
+      root.visible = false; setFlaps(a.box, 1); a.box.tape.visible = true; sp.group.visible = true; sp.group.scale.setScalar(S);
+    } else if (u < 4.6) {                     // turn to the camera and wave
+      g.position.set(0, 0, 0); g.rotation.set(0, 0, 0);
+      sp.group.position.set(170, 0, 0);
+      sp.group.rotation.y = -Math.PI / 2 * easeIO(clamp01((u - 1.6) / 0.5));
+      spiderWave(sp, t);
+    } else if (u < 6.2) {                     // scurry off to the right
+      const k = clamp01((u - 4.6) / 1.6);
+      sp.group.rotation.y = -Math.PI / 2 * (1 - clamp01(k * 4));
+      sp.group.position.set(170 + 520 * k * k, 0, 0); spiderWalk(sp, t, 1.4);
+      sp.crown.rotation.x = 0;
+    } else {                                  // unboxing: tape off, flaps open, the enclosure rises out
+      sp.group.visible = false;
+      a.box.tape.visible = u < 6.6;
+      const open = easeIO(clamp01((u - 6.6) / 1.2));
+      setFlaps(a.box, 1 - open);
+      const rise = easeIO(clamp01((u - 7.8) / 1.6));
+      root.visible = u > 7.6; root.position.y = 4 + rise * 225;
+    }
+    if (u >= 6.2) { a.confetti.visible = true; tickConfetti(a.confetti, reduce ? 0.6 : u - 9.2); } else a.confetti.visible = false;
+    if (u < 1.6) sp.group.visible = true;
   }
 }
 function animate() {
@@ -1653,11 +1882,13 @@ const STAGES = [
   { key: "printing", label: "Printing", head: "Printing now", desc: "Your enclosure is being printed layer by layer on the P1S." },
   { key: "post", label: "Finishing", head: "Finishing touches", desc: "Cleaning up the print, fitting the acrylic and gluing the door and skylight." },
   { key: "ready", label: "Packaging", head: "Packaging", desc: "All done and getting boxed up safely for the trip to you." },
-  { key: "shipped", label: "Shipped", head: "On its way!", desc: "Your enclosure has shipped. Watch your mailbox!" },
+  { key: "shipped", label: "Shipped", head: "On its way!", desc: "Your enclosure has shipped and a very dedicated spider is carrying it to you." },
+  { key: "delivered", label: "Delivered", head: "Delivered!", desc: "Your enclosure has arrived. Enjoy the new spood home!" },
 ];
 function stageIndex(status) {
   const s = String(status || "").toLowerCase().replace(/[^a-z]/g, "");
-  if (/ship|deliver|complete|done|sent/.test(s)) return 4;
+  if (/deliver|complete|done|arrived/.test(s)) return 5;
+  if (/ship|sent|transit/.test(s)) return 4;
   if (/ready|pack/.test(s)) return 3;
   if (/post|finish|assembl|process/.test(s)) return 2;
   if (/print/.test(s)) return 1;
@@ -1717,14 +1948,32 @@ function renderOrderDetail(o) {
     <h2>${escapeHtml(o.ref)}</h2>
     ${o.items.length > 1 ? `<div class="itemsel">${o.items.map((x, k) => `<button type="button" data-k="${k}" aria-pressed="${k === selectedItem}">Build ${k + 1}</button>`).join("")}</div>` : ""}
     <div class="tracker">${tracker}</div>
-    <div class="stagebox"><div class="sh">${S.head}</div><div class="sd">${S.desc}</div></div>
+    <div class="stagebox"><div class="sh">${S.head}</div><div class="sd">${S.desc}</div>${platesHtml(it, st)}${trackHtml(it, st)}</div>
     <div class="stagebox"><div class="ot"><b>Lookout ${escapeHtml(z.name)}${it.build?.bulk ? " bulk kit" : ""} × ${it.build?.qty || 1}</b></div><div class="sd">${escapeHtml(parts[0])}</div><div class="sd">${escapeHtml(parts[1])}</div></div>
     ${orders.admin && o.sheetUrl ? `<a class="linkbtn" style="justify-self:start;text-decoration:none" href="${escapeHtml(o.sheetUrl)}" target="_blank" rel="noopener">Open full order sheet →</a>` : ""}
     <div class="sd" style="font-size:.74rem;color:var(--muted)">Paid ${new Date(o.paidAt).toLocaleString()} · updates every minute</div>
   </div>`;
   $("backOrders").onclick = () => { selectedOrder = null; renderAccount(); };
   $("acctBody").querySelectorAll(".itemsel button").forEach(b => b.onclick = () => { selectedItem = Number(b.dataset.k); renderAccount(); });
-  showOrderScene({ build: it.build, stage: st });
+  showOrderScene({ build: it.build, stage: st, plates: it.plates || [] });
+}
+const KIND_NAMES = { main: "Base", lid: "Lid", frame: "Skylight frame", door: "Door handle", back: "Back wall", sides: "Side walls", floor: "Humidity floor", plaque: "Name plaque", tray: "Tray" };
+function platesHtml(it, st) {
+  if (st !== 1 || !(it.plates || []).length) return "";
+  const done = it.plates.filter(x => x.printed).length;
+  return `<div class="sd" style="margin-top:.45rem"><b>${done} of ${it.plates.length}</b> parts printed</div><div class="plist" style="margin-top:.3rem">${it.plates.map(x => `<span class="${x.printed ? "on" : ""}">${x.printed ? "✓ " : ""}${escapeHtml(KIND_NAMES[x.kind] || "Part")}</span>`).join("")}</div>`;
+}
+function trackUrl(n, carrier) {
+  const c = String(carrier || "").toLowerCase(), t = encodeURIComponent(n);
+  if (/ups/.test(c) || /^1Z/i.test(n)) return { name: "UPS", url: `https://www.ups.com/track?tracknum=${t}` };
+  if (/fedex/.test(c) || (!c && /^\d{12}$|^\d{15}$/.test(n))) return { name: "FedEx", url: `https://www.fedex.com/fedextrack/?trknbr=${t}` };
+  return { name: "USPS", url: `https://tools.usps.com/go/TrackConfirmAction?tLabels=${t}` };
+}
+function trackHtml(it, st) {
+  const n = String(it.tracking || "").trim();
+  if (st < 4 || !n) return "";
+  const c = trackUrl(n, it.carrier);
+  return `<div class="track" style="margin-top:.5rem"><span class="sd">${c.name} tracking</span><code>${escapeHtml(n)}</code><a class="linkbtn" style="text-decoration:none" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Track package →</a></div>`;
 }
 
 function handleReturn() {
