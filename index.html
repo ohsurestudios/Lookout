@@ -677,7 +677,7 @@ button { cursor: pointer; }
       const lower = new THREE.Group(); lower.position.copy(knee); piv.add(lower);
       lower.add(segment(new THREE.Vector3(), foot.clone().sub(knee), 0.16, [C.black, C.lime, C.black, C.teal, C.dark], tex));
       const kb = furry(kneeGeo, { len: 0.07, layers: 8, tex, repeat: [3, 2] }); lower.add(kb); // hides the joint seam
-      piv.userData = { side: s, i, y0: 0.95 }; piv.rotation.order = "YXZ";
+      piv.userData = { side: s, i, y0: 0.95, dir: dir.clone() };
       root.add(piv); legs.push(piv); piv.userData.lower = lower;
     }));
 
@@ -1841,8 +1841,8 @@ function spWave(sp, t) {
   if (sp.kind === "fuzzy") {
     spStand(sp, t);
     const L = sp.legs.find(x => x.userData.side > 0 && x.userData.i === 0);
-    if (L) fzLeg(L, 0.5 + Math.sin(t * 11) * 0.35, 1.0, 0.6 + Math.sin(t * 11) * 0.3);
-    sp.f.body.rotation.z = -0.08; return;
+    if (L) fzLeg(L, 1.15 + Math.sin(t * 9) * 0.25, 0.8, 0.75 + Math.sin(t * 9 + 1) * 0.45); // raised high, waving side to side
+    return;
   }
   if (sp.kind !== "rig") { spiderWave(sp, t); sp.bob = sp.body.position.y; return; }
   spStand(sp, t);
@@ -1862,10 +1862,16 @@ function fzBody(sp, bob, t, tilt = 0, nod = 0) {
   const bl = (t % 3.7) < 0.14 ? 0.12 : 1;                    // a quick blink every few seconds
   f.eyes.children.forEach(e => { e.scale.y = bl; });
 }
+// Moves a whole leg around its hip so it never comes apart: lift raises it along its own direction,
+// swing turns it forward or back, kneeBend flexes the lower half at the knee.
+const _fzUp = new THREE.Vector3(0, 1, 0), _fzA = new THREE.Vector3(), _fzQ = new THREE.Quaternion(), _fzQ2 = new THREE.Quaternion();
 function fzLeg(L, swing, lift, kneeBend = 0) {
   const d = L.userData;
-  L.rotation.set(0, swing, d.side * lift); L.position.y = d.y0 + lift * 0.12;
-  d.lower.rotation.set(0, 0, d.side * kneeBend);
+  _fzA.crossVectors(d.dir, _fzUp).normalize();              // axis that tips the leg up
+  _fzQ.setFromAxisAngle(_fzA, lift);
+  _fzQ2.setFromAxisAngle(_fzUp, swing);
+  L.quaternion.copy(_fzQ2).multiply(_fzQ); L.position.y = d.y0;
+  d.lower.quaternion.setFromAxisAngle(_fzA, kneeBend);
 }
 function newSpider() {
   return makeFuzzyWrapped();
@@ -1923,7 +1929,7 @@ function drawMapTexture(route) {
     x.beginPath(); x.moveTo(...P[0].q); P.slice(1).forEach(p => x.lineTo(...p.q)); x.stroke();
   }
   x.shadowBlur = 8;
-  P.slice(1).forEach(p => { x.shadowColor = x.fillStyle = "#ff3fd0"; x.beginPath(); x.arc(p.q[0], p.q[1], 6, 0, Math.PI * 2); x.fill(); });
+  P.slice(1, -1).forEach(p => { x.shadowColor = x.fillStyle = "#ff3fd0"; x.beginPath(); x.arc(p.q[0], p.q[1], 5, 0, Math.PI * 2); x.fill(); }); // the spider itself marks the latest scan
   x.shadowColor = x.fillStyle = "#c6ff3d"; x.beginPath(); x.arc(P[0].q[0], P[0].q[1], 8, 0, Math.PI * 2); x.fill();
   x.shadowBlur = 0; x.font = "800 22px Rubik, sans-serif"; x.lineWidth = 6; x.strokeStyle = "rgba(10,6,24,.9)";
   const label = (txt, q, col, dy) => { if (!txt) return; x.textAlign = q[0] > US_MAP.w * 0.75 ? "right" : "left"; const dx = x.textAlign === "right" ? -12 : 12; x.strokeText(txt, q[0] + dx, q[1] + dy); x.fillStyle = col; x.fillText(txt, q[0] + dx, q[1] + dy); };
@@ -2076,7 +2082,7 @@ function showOrderScene(o) {
     if (a.route.pts[0].q) {
       a.map = makeMapScene(a.route); extras.add(a.map);
       a.phase = "map"; grid.visible = false; root.visible = false;
-      a.spider.group.scale.setScalar(a.spider.S * 0.32); a.box.group.scale.setScalar(0.24);
+      a.spider.group.scale.setScalar(a.spider.S * 0.32); a.box.group.scale.setScalar(0.18);
       a.camFix = instant => mapCamera(a.route, instant);
     }
   }
