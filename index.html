@@ -349,6 +349,8 @@ button { cursor: pointer; }
 .itemsel button[aria-pressed="true"] { border-color: var(--pink); color: var(--pink); }
 .stagebadge { position: absolute; left: 50%; transform: translateX(-50%); bottom: 54px; background: rgba(21,16,39,.85); border: 1px solid var(--pink); color: var(--fg); border-radius: 999px; padding: .35rem .9rem; font-weight: 700; font-size: .85rem; white-space: nowrap; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* Inside the Oh Sure Spoods app: the app already shows its own header */
+.in-spoods .brand .kicker, .in-spoods .brand h1, .in-spoods .hint { display: none; }
 </style>
 
 
@@ -2270,6 +2272,7 @@ async function callFn(name, body) {
     method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain;charset=UTF-8" } }); }
   catch (e) { throw new Error("Couldn't reach the shop's checkout server. Check your connection and try again."); }
   let data = {}; try { data = await r.json(); } catch (e) {}
+  if (r.status === 401 && APP_MODE) tellApp({ type: "spoodhomes-need-token" }); // the app sends a fresh sign in
   if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
   return data;
 }
@@ -2311,9 +2314,41 @@ function showResult(kind, html, pre) {
   }
   const pane = $("sectionsPane"); pane.scrollTo({ top: pane.scrollHeight, behavior: "smooth" });
 }
+/* ---------------- app mode: running inside the Oh Sure Spoods Shop tab ----------------
+   The Spoods app loads this page with ?app=spoods in a frame. It hands over the signed in
+   Spoods account by message (no second sign in), and Stripe checkout opens outside the app.
+   Only messages from the Spoods app addresses below are trusted. */
+const SPOODS_APP_ORIGINS = ["https://spoods.ohsurestudios.com", "https://ohsurespoods.pages.dev", "https://beta.ohsurespoods.pages.dev", "https://localhost", "http://localhost", "capacitor://localhost"];
+const APP_MODE = (() => { try { return new URLSearchParams(location.search).get("app") === "spoods" && window.parent !== window; } catch (e) { return false; } })();
+let appParentOrigin = null;
+function tellApp(msg) { if (APP_MODE && appParentOrigin) window.parent.postMessage(msg, appParentOrigin); }
+function jwtEmail(t) { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch (e) { return ""; } }
+if (APP_MODE) {
+  document.documentElement.classList.add("in-spoods");
+  window.addEventListener("message", e => {
+    if (!SPOODS_APP_ORIGINS.includes(e.origin) || !e.data || typeof e.data !== "object") return;
+    appParentOrigin = e.origin;
+    if (e.data.type === "spoods-session" && typeof e.data.accessToken === "string") {
+      const had = session && session.access_token;
+      session = { access_token: e.data.accessToken, user: { email: e.data.email || jwtEmail(e.data.accessToken) } };
+      if (!had) afterAuthChange(); else { $("acctDot").hidden = false; renderSignGate(); }
+    } else if (e.data.type === "spoods-signout") {
+      session = null; afterAuthChange();
+    } else if (e.data.type === "spoods-show" && e.data.view === "orders") {
+      selectedOrder = null; go("account");
+    }
+  });
+  // Ask the app for the signed in account. Nothing secret is in this message.
+  const anc = (location.ancestorOrigins && location.ancestorOrigins[0]) || (() => { try { return new URL(document.referrer).origin; } catch (e) { return ""; } })();
+  const targets = SPOODS_APP_ORIGINS.includes(anc) ? [anc] : SPOODS_APP_ORIGINS;
+  const hello = () => targets.forEach(o => { try { window.parent.postMessage({ type: "spoodhomes-ready" }, o); } catch (e) {} });
+  hello(); setTimeout(hello, 800);
+}
+
 /* ---------------- accounts (email link sign in) ---------------- */
 let sb = null, session = null;
 function initAuth() {
+  if (APP_MODE) { renderSignGate(); return; } // the Spoods app hands over its sign in instead
   if (!connected() || !window.supabase) { renderSignGate(); return; }
   try {
     sb = window.supabase.createClient(CONFIG.authUrl || CONFIG.supabaseUrl, CONFIG.authAnonKey || CONFIG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
@@ -2362,6 +2397,7 @@ function showCodeEntry(statusEl, email, msgHtml) {
   $(pre + "Again").onclick = () => { statusEl.innerHTML = ""; statusEl.className = ""; const inp = $(pre + "Email"); inp.value = email; inp.focus(); };
 }
 function signInBlock(prefix, lead) {
+  if (APP_MODE) return `<div><b>Sign in to Oh Sure Spoods</b> to check out and follow your orders. Your Spoods account works here automatically.</div><button type="button" id="${prefix}AppSignIn">Sign in</button><div id="${prefix}Status" aria-live="polite"></div>`;
   return `<div>${lead}</div>
     <div class="spoodsacct">Use your <b>Oh Sure Spoods</b> account. New here? Create one below, it's free and works in the Spoods app too.</div>
     <input id="${prefix}Email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email">
@@ -2371,6 +2407,7 @@ function signInBlock(prefix, lead) {
     <div id="${prefix}Status" aria-live="polite"></div>`;
 }
 function wireSignIn(prefix) {
+  if (APP_MODE) { const b = $(prefix + "AppSignIn"); if (b) b.onclick = () => tellApp({ type: "spoodhomes-need-signin" }); return; }
   const st = () => $(prefix + "Status"), em = () => $(prefix + "Email").value.trim().toLowerCase(), pw = () => $(prefix + "Pass").value;
   const bad = m => { st().textContent = m; st().className = "errmsg"; };
   const okEmail = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em()) || (bad("That email address looks incomplete."), false);
@@ -2438,8 +2475,13 @@ $("orderForm").addEventListener("submit", async e => {
       }
       items.push({ build: it.build, previewUrl, logoUrl });
     }
-    const res = await callFn(CONFIG.functions.checkout, { items, zip, customer: { name, phone, notes }, accessToken: session.access_token });
-    window.location.href = res.url;
+    const res = await callFn(CONFIG.functions.checkout, { items, zip, customer: { name, phone, notes }, accessToken: session.access_token, returnTo: APP_MODE ? appReturnTo() : undefined });
+    if (APP_MODE) {
+      // Stripe won't run inside another app's frame, so the Spoods app opens it in the phone's browser.
+      tellApp({ type: "spoodhomes-open-checkout", url: res.url, ref: res.ref });
+      showResult("ok", `<b>Checkout opened in your browser.</b> Finish paying there and you'll come right back here. Order <b>${escapeHtml(res.ref || "")}</b>.`, null);
+      btn.disabled = false; btn.textContent = "Checkout";
+    } else window.location.href = res.url;
   } catch (err) {
     showResult("warn", `<b>Checkout didn't open.</b> ${escapeHtml(err.message)} Nothing was charged. Your cart is saved on this device, so you can try again.`, null);
     btn.disabled = false; btn.textContent = "Checkout";
@@ -2497,14 +2539,14 @@ function renderAccount(keepScroll) {
     return `<button type="button" class="ocard" data-id="${escapeHtml(x.id)}">${img ? `<img src="${escapeHtml(img)}" alt="">` : `<div class="noimg"></div>`}<div><div class="ot">${escapeHtml(x.ref)}${orders.admin && x.customerName ? ` · ${escapeHtml(x.customerName)}` : ""}</div><div class="od">${new Date(x.paidAt).toLocaleDateString()} · ${count} enclosure${count > 1 ? "s" : ""}</div></div><span class="spill s${st + 1}">${STAGES[st].label}</span></button>`;
   }).join("");
   box.innerHTML = `<div class="acct">
-    <div class="who"><span>Signed in as <b>${escapeHtml(session.user.email)}</b>${orders.admin ? " · <b style='color:var(--lime)'>Admin</b>" : ""}</span><button type="button" class="linkbtn" id="signOut">Sign out</button></div>
+    <div class="who"><span>Signed in as <b>${escapeHtml(session.user.email)}</b>${orders.admin ? " · <b style='color:var(--lime)'>Admin</b>" : ""}</span>${APP_MODE ? "" : `<button type="button" class="linkbtn" id="signOut">Sign out</button>`}</div>
     <h2>${orders.admin ? "All orders" : "My orders"}</h2>
     ${orders.error ? `<div class="errmsg">${escapeHtml(orders.error)}</div>` : ""}
     <div class="olist">${cards || `<div class="cartempty">No orders yet. Once you check out, your order shows up here with live updates.</div>`}</div>
     <button type="button" class="linkbtn" id="refreshOrders" style="justify-self:start">Refresh</button>
   </div>`;
   box.querySelectorAll(".ocard").forEach(b => b.onclick = () => { selectedOrder = b.dataset.id; selectedItem = 0; renderAccount(); });
-  $("signOut").onclick = async () => { await sb.auth.signOut(); orders = { list: [], admin: false, loaded: false, error: "", at: 0 }; selectedOrder = null; renderAccount(); };
+  if ($("signOut")) $("signOut").onclick = async () => { await sb.auth.signOut({ scope: "local" }); orders = { list: [], admin: false, loaded: false, error: "", at: 0 }; selectedOrder = null; renderAccount(); };
   $("refreshOrders").onclick = () => loadOrders();
 }
 function renderOrderDetail(o) {
@@ -2554,6 +2596,11 @@ function trackHtml(it, st) {
   return `<div class="track" style="margin-top:.5rem"><span class="sd">${c.name} tracking</span><code>${escapeHtml(n)}</code><a class="linkbtn" style="text-decoration:none" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Track package →</a></div>${eta}${scans}`;
 }
 
+// Where Stripe sends people back to when they bought from inside the Spoods app (the app can override with ?return=).
+function appReturnTo() {
+  try { const r = new URLSearchParams(location.search).get("return"); if (r && SPOODS_APP_ORIGINS.some(o => r.startsWith(o + "/"))) return r; } catch (e) {}
+  return (appParentOrigin && /^https:\/\/(spoods\.ohsurestudios\.com|ohsurespoods\.pages\.dev|beta\.ohsurespoods\.pages\.dev)$/.test(appParentOrigin) ? appParentOrigin : "https://spoods.ohsurestudios.com") + "/shop";
+}
 function handleReturn() {
   let params; try { params = new URLSearchParams(location.search); } catch (e) { return; }
   const paid = params.get("paid"), canceled = params.get("canceled");
@@ -2562,7 +2609,7 @@ function handleReturn() {
   if (paid) { cart = []; saveCart(); renderSummary(); }
   if (paid) showResult("ok", `<b>Payment received, thank you!</b> Your order number is <b>${escapeHtml(paid.replace(/[^A-Z0-9]/gi, ""))}</b>. Stripe emailed your receipt, and Oh Sure Studios will start production soon.`, null);
   else showResult("warn", `<b>Checkout was canceled.</b> You weren't charged, and your build is still here whenever you're ready.`, null);
-  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  try { history.replaceState(null, "", location.pathname + (APP_MODE ? "?app=spoods" : "")); } catch (e) {}
 }
 
 /* ---------------- start ---------------- */
