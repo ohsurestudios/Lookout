@@ -1921,22 +1921,23 @@ function drawMapTexture(route) {
   x.shadowColor = "#3de0ff"; x.shadowBlur = 10; x.strokeStyle = "#3de0ff"; x.lineWidth = 2; x.stroke(new Path2D(US_MAP.nation));
   const P = route.pts, last = P[P.length - 1];
   if (route.dest && route.dest.q !== last.q) {      // the rest of the trip, dashed
-    x.shadowBlur = 0; x.setLineDash([7, 7]); x.strokeStyle = "rgba(255,63,208,.8)"; x.lineWidth = 3.5;
+    x.shadowBlur = 0; x.setLineDash([7, 7]); x.strokeStyle = "rgba(255,63,208,.8)"; x.lineWidth = 2.5;
     x.beginPath(); x.moveTo(...last.q); x.lineTo(...route.dest.q); x.stroke(); x.setLineDash([]);
   }
   if (P.length > 1) {                                // the trip so far, glowing lime
-    x.shadowColor = "#c6ff3d"; x.shadowBlur = 14; x.strokeStyle = "#c6ff3d"; x.lineWidth = 5;
+    x.shadowColor = "#c6ff3d"; x.shadowBlur = 10; x.strokeStyle = "#c6ff3d"; x.lineWidth = 3.5;
     x.beginPath(); x.moveTo(...P[0].q); P.slice(1).forEach(p => x.lineTo(...p.q)); x.stroke();
   }
   x.shadowBlur = 8;
-  P.slice(1, -1).forEach(p => { x.shadowColor = x.fillStyle = "#ff3fd0"; x.beginPath(); x.arc(p.q[0], p.q[1], 5, 0, Math.PI * 2); x.fill(); }); // the spider itself marks the latest scan
-  x.shadowColor = x.fillStyle = "#c6ff3d"; x.beginPath(); x.arc(P[0].q[0], P[0].q[1], 8, 0, Math.PI * 2); x.fill();
-  x.shadowBlur = 0; x.font = "800 22px Rubik, sans-serif"; x.lineWidth = 6; x.strokeStyle = "rgba(10,6,24,.9)";
-  const label = (txt, q, col, dy) => { if (!txt) return; x.textAlign = q[0] > US_MAP.w * 0.75 ? "right" : "left"; const dx = x.textAlign === "right" ? -12 : 12; x.strokeText(txt, q[0] + dx, q[1] + dy); x.fillStyle = col; x.fillText(txt, q[0] + dx, q[1] + dy); };
+  P.slice(1, -1).forEach(p => { x.shadowColor = x.fillStyle = "#ff3fd0"; x.beginPath(); x.arc(p.q[0], p.q[1], 3.5, 0, Math.PI * 2); x.fill(); }); // the spider itself marks the latest scan
+  x.shadowColor = x.fillStyle = "#c6ff3d"; x.beginPath(); x.arc(P[0].q[0], P[0].q[1], 5, 0, Math.PI * 2); x.fill();
+  x.shadowBlur = 0; x.font = "800 13px Rubik, sans-serif"; x.lineWidth = 4; x.strokeStyle = "rgba(10,6,24,.9)";
+  const label = (txt, q, col, dy) => { if (!txt) return; x.textAlign = q[0] > US_MAP.w * 0.75 ? "right" : "left"; const dx = x.textAlign === "right" ? -8 : 8; x.strokeText(txt, q[0] + dx, q[1] + dy); x.fillStyle = col; x.fillText(txt, q[0] + dx, q[1] + dy); };
   const atDest = route.dest && last.q[0] === route.dest.q[0] && last.q[1] === route.dest.q[1];
-  label("Oh Sure Studios", P[0].q, "#c6ff3d", -12);
-  if (P.length > 1 && !atDest) label(last.label, last.q, "#ff9be9", 28);
-  if (route.dest) label(route.dest.label || "You", route.dest.q, "#ffffff", -14);
+  const near = route.dest && Math.hypot(route.dest.q[0] - P[0].q[0], route.dest.q[1] - P[0].q[1]) < 40;
+  if (!near) label("Oh Sure Studios", P[0].q, "#c6ff3d", -9); // close to home: only the customer's town gets a label
+  if (P.length > 1 && !atDest) label(last.label, last.q, "#ff9be9", 18);
+  if (route.dest) label(route.dest.label || "You", route.dest.q, "#ffffff", -11);
   const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 8;
   return tex;
 }
@@ -1949,7 +1950,7 @@ function makeMapScene(route) {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(6, 18, 20), pm); cone.rotation.x = Math.PI; cone.position.y = 9; pin.add(cone);
     const ball = new THREE.Mesh(new THREE.SphereGeometry(8, 20, 14), pm); ball.position.y = 22; pin.add(ball);
     const dot = new THREE.Mesh(new THREE.SphereGeometry(3.2, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffffff })); dot.position.set(0, 23, 6); pin.add(dot);
-    pin.scale.setScalar(1.6); pin.position.copy(mapWorld(route.dest.q)); g.add(pin); g.userData.pin = pin;
+    pin.scale.setScalar(0.75); pin.position.copy(mapWorld(route.dest.q)); g.add(pin); g.userData.pin = pin;
   }
   return g;
 }
@@ -1958,9 +1959,9 @@ function mapCamera(route, instant) {
   const qs = route.pts.map(p => p.q).concat(route.dest ? [route.dest.q] : []);
   const xs = qs.map(q => q[0] - US_MAP.w / 2), zs = qs.map(q => q[1] - US_MAP.h / 2);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
-  const ex = Math.max(...xs) - Math.min(...xs) + 140, ez = Math.max(...zs) - Math.min(...zs) + 140;
+  const ex = Math.max(Math.max(...xs) - Math.min(...xs) + 160, 440), ez = Math.max(Math.max(...zs) - Math.min(...zs) + 160, 300);
   const tf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const dist = Math.max(ex / 2 / (tf * camera.aspect), ez * 0.75 / tf, 170) * 1.15;
+  const dist = Math.max(ex / 2 / (tf * camera.aspect), ez * 0.75 / tf) * 1.1;
   const target = new THREE.Vector3(cx, 0, cz), to = target.clone().add(new THREE.Vector3(0, 1, 0.62).normalize().multiplyScalar(dist));
   if (instant) { camera.position.copy(to); controls.target.copy(target); controls.update(); return; }
   camAnim = { from: camera.position.clone(), to, tFrom: controls.target.clone(), tTo: target, t: 0 };
@@ -2082,7 +2083,7 @@ function showOrderScene(o) {
     if (a.route.pts[0].q) {
       a.map = makeMapScene(a.route); extras.add(a.map);
       a.phase = "map"; grid.visible = false; root.visible = false;
-      a.spider.group.scale.setScalar(a.spider.S * 0.32); a.box.group.scale.setScalar(0.18);
+      a.spider.group.scale.setScalar(a.spider.S * 0.2); a.box.group.scale.setScalar(0.12);
       a.camFix = instant => mapCamera(a.route, instant);
     }
   }
@@ -2208,10 +2209,21 @@ function tickMapTrip(a, t, reduce, final) {
   if (a.map.userData.pin) a.map.userData.pin.position.y = 1 + Math.abs(Math.sin(t * 2.4)) * 6;
   if (final) {                                // the whole trip, ending at the customer's pin
     const k = easeIO(clamp01(t / 3.6));
-    if (P.length > 1) walkAlong(sp, P, k); else sp.group.position.copy(mapWorld(P[0]));
-    if (k < 1) spWalk(sp, t, 1.3); else spStand(sp, t);
-  } else if (P.length < 2) {                  // waiting at the shop for the first scan
-    sp.group.position.copy(mapWorld(P[0])); sp.group.rotation.y = a.route.dest ? Math.atan2(-(a.route.dest.q[1] - P[0][1]), a.route.dest.q[0] - P[0][0]) : Math.PI;
+    // stop just short of the pin so the spider doesn't stand inside it
+    const W = P.map(mapWorld), end = W[W.length - 1], prev = W[W.length - 2];
+    if (prev && end.distanceTo(prev) > 30) {
+      const stop = end.clone().addScaledVector(prev.clone().sub(end).normalize(), 20); P[P.length - 1] = [stop.x + US_MAP.w / 2, stop.z + US_MAP.h / 2];
+      walkAlong(sp, P, k);
+      if (k < 1) spWalk(sp, t, 1.3); else spStand(sp, t);
+    } else {                                   // shipped close to home: just stand beside the pin
+      sp.group.position.copy(end).add(new THREE.Vector3(-22, 0, 12)); sp.group.position.y = 1; sp.group.rotation.y = -Math.PI / 2;
+      spStand(sp, t);
+    }
+  } else if (P.length < 2) {                  // waiting beside the shop for the first scan
+    const home = mapWorld(P[0]), pin = a.route.dest && mapWorld(a.route.dest.q);
+    const away = pin && pin.distanceTo(home) > 1 ? home.clone().sub(pin).setY(0).normalize() : new THREE.Vector3(-1, 0, 0.5).normalize();
+    sp.group.position.copy(home).addScaledVector(away, 22); sp.group.position.y = 1;
+    sp.group.rotation.y = -Math.PI / 2;        // turned toward the viewer
     spStand(sp, t);
   } else {                                    // walks the newest leg of the trip, rests at the latest scan, repeats
     const legQ = P.slice(-2), len = Math.hypot(legQ[1][0] - legQ[0][0], legQ[1][1] - legQ[0][1]);
