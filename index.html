@@ -202,6 +202,8 @@ button { cursor: pointer; }
 .addcolor { margin-top: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .scrollhint { position: sticky; bottom: 6px; justify-self: center; z-index: 4; display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .9rem; border-radius: 999px; border: 1px solid var(--pink); background: rgba(21,16,39,.94); color: var(--fg); font: inherit; font-size: .76rem; font-weight: 700; box-shadow: 0 0 14px rgba(255,63,208,.45); cursor: pointer; animation: hintbob 1.6s ease-in-out infinite; transition: opacity .2s; }
 .scrollhint.off { opacity: 0; pointer-events: none; }
+.spoodsacct { font-size: .8rem; color: var(--muted); padding: 8px 10px; border: 1px dashed var(--lime); border-radius: 10px; }
+.ghostbtn { background: transparent !important; border: 1px solid var(--cyan) !important; color: var(--cyan) !important; }
 .cilogo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); font-size: .78rem; }
 .cilogo img { width: 34px; height: 34px; object-fit: contain; background: #fff; border-radius: 50%; }
 .cilogo.missing { border-color: var(--pink); color: var(--pink); font-weight: 700; }
@@ -695,6 +697,9 @@ const CONFIG = {
   // Orders reach OSS 3D Orders only after Stripe payment, through the stripe-webhook function.
   supabaseUrl: "https://pavkyapbvycspkjjpwkb.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhdmt5YXBidnljc3Brampwd2tiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NTQzOTMsImV4cCI6MjEwNjEzMDM5M30.IGm4eKp2Q161azePJWFFXZ5fEAZuKBRDNPOP6OfFtiU",
+  // Sign in uses the Oh Sure Spoods account system, so one account works in both places.
+  authUrl: "https://xpijaxfwxwsqqwvqjsir.supabase.co",
+  authAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwaWpheGZ3eHdzcXF3dnFqc2lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MTQ0ODQsImV4cCI6MjEwNzI5MDQ4NH0.Oiv1QT2n_SU08JHDf3ef-zA3sJF3HIFLDQgvUhpRKqY",
   uploadsBucket: "enclosure-orders", // storage bucket for logo art and preview images
   // Web names of the Supabase functions (the end of each function's Endpoint URL, not its label)
   functions: { quote: "quick-worker", checkout: "enclosure-checkout", orders: "my-orders" },
@@ -2308,7 +2313,7 @@ let sb = null, session = null;
 function initAuth() {
   if (!connected() || !window.supabase) { renderSignGate(); return; }
   try {
-    sb = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
+    sb = window.supabase.createClient(CONFIG.authUrl || CONFIG.supabaseUrl, CONFIG.authAnonKey || CONFIG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
     sb.auth.getSession().then(({ data }) => { session = data.session; afterAuthChange(); });
     const recheck = () => { if (!document.hidden && !session) sb.auth.getSession().then(({ data }) => { if (data.session) { session = data.session; afterAuthChange(); } }); };
     document.addEventListener("visibilitychange", recheck); window.addEventListener("focus", recheck);
@@ -2331,40 +2336,65 @@ async function sendLink(email, statusEl) {
   statusEl.textContent = "Sending…"; statusEl.className = "";
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
   if (error) { statusEl.textContent = `Couldn't send the link: ${error.message}`; statusEl.className = "errmsg"; return; }
+  showCodeEntry(statusEl, email, `Check <b>${escapeHtml(email)}</b>. Type the code from the email here (or tap the link in it on this same browser):`);
+}
+// Code box used for sign in codes and for confirming a new account.
+function showCodeEntry(statusEl, email, msgHtml) {
   const pre = statusEl.id.replace(/Status$/, "");
   statusEl.className = "ok";
-  statusEl.innerHTML = `Check <b>${escapeHtml(email)}</b>. Tap the link in the email, <b>or type the code from the email here</b> (best on iPhone):
+  statusEl.innerHTML = `${msgHtml}
     <div class="codeRow"><input id="${pre}Code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code" aria-label="Code from the email"><button type="button" id="${pre}Verify">Sign in</button></div>
     <div id="${pre}CodeMsg" aria-live="polite"></div>
     <button type="button" class="linkbtn" id="${pre}Again" style="margin-top:6px">Send again or use a different email</button>`;
-  try { localStorage.setItem("ossPendingEmail", email); } catch (e) {}
   const verify = async () => {
     const code = ($(pre + "Code").value || "").replace(/\D/g, ""), msg = $(pre + "CodeMsg");
     if (code.length < 6) { msg.textContent = "Type the whole code from the email."; msg.className = "errmsg"; return; }
     msg.textContent = "Checking…"; msg.className = "";
-    let { error } = await sb.auth.verifyOtp({ email, token: code, type: "email" });
-    if (error) ({ error } = await sb.auth.verifyOtp({ email, token: code, type: "magiclink" }));
-    if (error) { msg.textContent = "That code didn't work. It may have expired, so tap Send again for a new one."; msg.className = "errmsg"; return; }
-    try { localStorage.removeItem("ossPendingEmail"); } catch (e) {}
+    let error = null;
+    for (const type of ["email", "signup", "magiclink"]) { ({ error } = await sb.auth.verifyOtp({ email, token: code, type })); if (!error) break; }
+    if (error) { msg.textContent = "That code didn't work. It may have expired, so tap Send again for a new one."; msg.className = "errmsg"; }
   };
   $(pre + "Verify").onclick = verify;
   $(pre + "Code").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); verify(); } });
   $(pre + "Again").onclick = () => { statusEl.innerHTML = ""; statusEl.className = ""; const inp = $(pre + "Email"); inp.value = email; inp.focus(); };
 }
 function signInBlock(prefix, lead) {
-  return `<div>${lead}</div><div class="row2"><input id="${prefix}Email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email"><button type="button" id="${prefix}Send">Email me a code</button></div><div id="${prefix}Status" aria-live="polite"></div>`;
+  return `<div>${lead}</div>
+    <div class="spoodsacct">Use your <b>Oh Sure Spoods</b> account. New here? Create one below, it's free and works in the Spoods app too.</div>
+    <input id="${prefix}Email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email">
+    <input id="${prefix}Pass" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+    <div class="row2"><button type="button" id="${prefix}Login">Sign in</button><button type="button" class="ghostbtn" id="${prefix}Create">Create account</button></div>
+    <button type="button" class="linkbtn" id="${prefix}Send" style="justify-self:start">Forgot password? Email me a code instead</button>
+    <div id="${prefix}Status" aria-live="polite"></div>`;
 }
 function wireSignIn(prefix) {
-  const send = () => sendLink($(prefix + "Email").value.trim(), $(prefix + "Status"));
-  $(prefix + "Send").onclick = send;
-  $(prefix + "Email").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); send(); } });
+  const st = () => $(prefix + "Status"), em = () => $(prefix + "Email").value.trim().toLowerCase(), pw = () => $(prefix + "Pass").value;
+  const bad = m => { st().textContent = m; st().className = "errmsg"; };
+  const okEmail = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em()) || (bad("That email address looks incomplete."), false);
+  $(prefix + "Send").onclick = () => sendLink(em(), st());
+  $(prefix + "Login").onclick = async () => {
+    if (!okEmail()) return; if (!pw()) return bad("Type your password, or tap Email me a code.");
+    if (!sb) return bad("Sign in isn't connected in this preview.");
+    st().textContent = "Signing in…"; st().className = "";
+    const { error } = await sb.auth.signInWithPassword({ email: em(), password: pw() });
+    if (error) bad(/confirm/i.test(error.message) ? "Confirm your email first. Tap Email me a code to finish." : "That email and password didn't match. Try again or tap Email me a code.");
+  };
+  $(prefix + "Create").onclick = async () => {
+    if (!okEmail()) return; if (pw().length < 8) return bad("Pick a password with at least 8 characters.");
+    if (!sb) return bad("Sign in isn't connected in this preview.");
+    st().textContent = "Creating your account…"; st().className = "";
+    const { data, error } = await sb.auth.signUp({ email: em(), password: pw() });
+    if (error) return bad(/registered|exists/i.test(error.message) ? "You already have an account. Tap Sign in instead." : `Couldn't create the account: ${error.message}`);
+    if (!data.session) showCodeEntry(st(), em(), `Almost done! We sent a code to <b>${escapeHtml(em())}</b>. Type it here to confirm your account:`);
+  };
+  $(prefix + "Pass").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $(prefix + "Login").click(); } });
 }
 function renderSignGate() {
   const g = $("signGate"); if (!g) return;
   if (!connected()) { g.hidden = true; return; }
   if (session) { g.hidden = false; g.innerHTML = `<div>Signed in as <b>${escapeHtml(session.user.email)}</b>. Your order will show up in My orders.</div>`; return; }
   g.hidden = false;
-  g.innerHTML = signInBlock("gate", "<b>Sign in to check out.</b> We'll email you a sign in code, no password needed. Your cart stays saved while you check your email.");
+  g.innerHTML = signInBlock("gate", "<b>Sign in to check out.</b> Your cart stays saved while you sign in.");
   wireSignIn("gate");
 }
 
@@ -2450,7 +2480,7 @@ function renderAccount(keepScroll) {
   const box = $("acctBody");
   if (!connected()) { box.innerHTML = `<div class="acct"><h2>My account</h2><p class="note">Accounts work on the live site. In this preview there's nothing to sign in to.</p></div>`; showOrderScene(null); return; }
   if (!session) {
-    box.innerHTML = `<div class="acct"><h2>Sign in</h2><div class="signgate">${signInBlock("acct", "Enter your email and we'll send you a sign in code, no password needed. You'll need an account to check out and to follow your orders.")}</div></div>`;
+    box.innerHTML = `<div class="acct"><h2>Sign in</h2><div class="signgate">${signInBlock("acct", "Sign in to check out and to follow your orders with live updates.")}</div></div>`;
     wireSignIn("acct"); showOrderScene(null); return;
   }
   startOrdersPolling();
