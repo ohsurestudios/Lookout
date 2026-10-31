@@ -1368,11 +1368,13 @@ const BASE_SPLIT = 29.2; // posts color starts above the front base
 const clipBase = new THREE.Plane(new THREE.Vector3(0, -1, 0), BASE_SPLIT);
 const clipPosts = new THREE.Plane(new THREE.Vector3(0, 1, 0), -BASE_SPLIT);
 
+// Bambu's color codes are regular screen (sRGB) colors. The 3D lighting works in "linear" color,
+// so each code is converted first; skipping this is what made every filament look pale and pastel.
 function renderColor(hex) {
   const c = new THREE.Color(hex);
   const hsl = {}; c.getHSL(hsl);
-  if (hsl.l < 0.09) c.setHSL(hsl.h, hsl.s, 0.09); // keep very dark filament readable
-  return c;
+  if (hsl.l < 0.06) c.setHSL(hsl.h, hsl.s, 0.06); // keep very dark filament readable
+  return c.convertSRGBToLinear();
 }
 function matte(hex, extra) { return new THREE.MeshStandardMaterial(Object.assign({ color: renderColor(hex), roughness: 0.82, metalness: 0.0 }, extra || {})); }
 
@@ -1391,10 +1393,11 @@ function initScene() {
   controls.minDistance = 120; controls.maxDistance = 1400;
   controls.maxPolarAngle = Math.PI * 0.53;
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x2a1f4a, 0.75));
-  const key = new THREE.DirectionalLight(0xffffff, 0.75); key.position.set(180, 320, 260); scene.add(key);
-  const rim = new THREE.DirectionalLight(0xff7be6, 0.35); rim.position.set(-260, 140, -220); scene.add(rim);
-  const fill = new THREE.DirectionalLight(0x6fe9ff, 0.25); fill.position.set(-200, 60, 220); scene.add(fill);
+  // Neutral white light up front so filament colors read true; the pink rim light stays on the back edges for the neon look.
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x2a1f4a, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(180, 320, 260); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xff7be6, 0.3); rim.position.set(-260, 140, -220); scene.add(rim);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.2); fill.position.set(-200, 60, 220); scene.add(fill);
 
   grid = new THREE.GridHelper(1600, 64, 0x3a2b70, 0x221a45);
   grid.position.y = -0.2; scene.add(grid);
@@ -1501,7 +1504,7 @@ function drawPlaqueText() {
   const ctx = plaqueCanvas.getContext("2d"); const W = plaqueCanvas.width, H = plaqueCanvas.height;
   ctx.clearRect(0, 0, W, H);
   const name = (state.plaqueName || "Your spider").trim();
-  const col = "#" + renderColor(fil(state.colors.plaqueText).hex).getHexString();
+  const col = fil(state.colors.plaqueText).hex; // the label is a flat image, so it uses the code as is
   let size = 190; ctx.font = plaqueFontCss(size);
   while (ctx.measureText(name).width > W * 0.84 && size > 40) { size -= 6; ctx.font = plaqueFontCss(size); }
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
