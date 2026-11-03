@@ -161,6 +161,7 @@ function render(d, focus) {
 
   h += `<div class="card"><h2>Payment</h2>
     <div class="row"><span>Enclosures</span><span class="r">${usd(paid.subtotal)}</span></div>
+    ${Number(paid.discount) > 0 ? `<div class="row"><span>Discount${paid.discountCode ? " (" + esc(paid.discountCode) + ")" : ""}</span><span class="r">−${usd(paid.discount)}</span></div>` : ""}
     <div class="row"><span>Shipping${d.shipping.service ? " (" + esc(d.shipping.service) + ")" : ""}</span><span class="r">${usd(paid.shipping)}</span></div>
     <div class="row total"><span>Paid</span><span class="r">${usd(paid.total)}</span></div></div>`;
 
