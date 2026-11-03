@@ -803,6 +803,7 @@ const DEFAULT_STATE = {
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
 let activeZone = "posts";
+let lastPicked = null; // the last color tapped, for "Use this color on every part"
 let logo = null; // { file, dataUrl, img }
 
 // Saved builds from before colors started blank held the old pink defaults, so those are dropped (new key).
@@ -883,13 +884,15 @@ function renderZones() {
     b.querySelector(".zn").textContent = z.name;
     b.querySelector(".zc").textContent = f.name;
     if (f.unset) { b.classList.add("unset"); b.querySelector(".sw").classList.add("empty"); }
-    b.addEventListener("click", () => { activeZone = z.id; renderZones(); renderSwatches(); });
+    b.addEventListener("click", () => { activeZone = z.id; if (state.colors[z.id]) lastPicked = state.colors[z.id]; renderZones(); renderSwatches(); });
     box.appendChild(b);
   });
   const az = zs.find(z => z.id === activeZone);
   $("activeZoneName").textContent = state.bulk && az.bulkName ? az.bulkName : az.name;
   if (state.bulk) box.querySelectorAll(".zn").forEach(el => { if (el.textContent === "Posts") el.textContent = "Enclosure color"; });
   $("applyAll").hidden = state.bulk;
+  const allC = lastPicked || state.colors[activeZone];
+  $("applyAll").textContent = allC ? `Use ${allC} on every part` : "Use this color on every part";
   const n = enclosureColors().length;
   const miss = missingColorZones().length;
   $("colorCountTag").innerHTML = miss ? `<b>${miss}</b> part${miss > 1 ? "s" : ""} still need${miss > 1 ? "" : "s"} a color` : `<b>${n}</b> color${n > 1 ? "s" : ""} on the enclosure`;
@@ -915,7 +918,7 @@ function renderSwatches() {
     if (usedBy[f.name]) b.querySelector(".used").textContent = "In use";
     b.addEventListener("click", () => {
       const first = !state.colors[activeZone];
-      state.colors[activeZone] = f.name;
+      state.colors[activeZone] = f.name; lastPicked = f.name;
       const next = first && missingColorZones()[0];
       if (next) activeZone = next.id;
       changed();
@@ -1131,7 +1134,7 @@ function resetBuilder() {
   const size = state.size;
   state = JSON.parse(JSON.stringify(DEFAULT_STATE)); state.size = size;
   logo = null; $("logoFile").value = ""; $("logoPreview").hidden = true; $("logoName").textContent = "PNG, JPG, or SVG. A square image works best.";
-  $("plaqueName").value = ""; $("colorRequest").value = ""; activeZone = "posts";
+  $("plaqueName").value = ""; $("colorRequest").value = ""; activeZone = "posts"; lastPicked = null;
   changed();
 }
 function addToOrder() {
@@ -1358,7 +1361,10 @@ function lockForBulk() {
 
 /* controls */
 $("search").addEventListener("input", applySearch);
-$("applyAll").addEventListener("click", () => { const c = state.colors[activeZone]; if (!c) { toast("Pick a color for this part first."); return; } activeZones().filter(z => !z.ownPrint && z.id !== "plaqueText").forEach(z => state.colors[z.id] = c); changed(); });
+$("applyAll").addEventListener("click", () => {
+  // After a pick the builder jumps to the next blank part, so use the color just picked (or this part's color).
+  const c = lastPicked || state.colors[activeZone];
+  if (!c) { toast("Pick a color first, then tap this to use it everywhere."); return; } activeZones().filter(z => !z.ownPrint && z.id !== "plaqueText").forEach(z => state.colors[z.id] = c); changed(); });
 $("plaqueName").value = state.plaqueName;
 $("colorRequest").value = state.colorRequest || "";
 $("colorRequest").addEventListener("input", e => { state.colorRequest = e.target.value; save(); renderSummary(); });
