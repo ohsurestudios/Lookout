@@ -805,8 +805,10 @@ let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
 let activeZone = "posts";
 let logo = null; // { file, dataUrl, img }
 
-try { const saved = JSON.parse(localStorage.getItem("ossEncBuild") || "null"); if (saved && saved.colors) state = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), saved, { colors: Object.assign({}, DEFAULT_STATE.colors, saved.colors), walls: Object.assign({}, DEFAULT_STATE.walls, saved.walls) }); if (state.front === "logo") state.front = "sticker"; if (!AVAILABLE_SIZES.includes(state.size)) { state.size = "shelf"; } if (!SIZES.find(z => z.id === state.size)) state.size = "shelf"; } catch (e) {}
-function save() { try { localStorage.setItem("ossEncBuild", JSON.stringify(state)); } catch (e) {} }
+// Saved builds from before colors started blank held the old pink defaults, so those are dropped (new key).
+try { localStorage.removeItem("ossEncBuild"); } catch (e) {}
+try { const saved = JSON.parse(localStorage.getItem("ossEncBuild2") || "null"); if (saved && saved.colors) state = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), saved, { colors: Object.assign({}, DEFAULT_STATE.colors, saved.colors), walls: Object.assign({}, DEFAULT_STATE.walls, saved.walls) }); if (state.front === "logo") state.front = "sticker"; if (!AVAILABLE_SIZES.includes(state.size)) { state.size = "shelf"; } if (!SIZES.find(z => z.id === state.size)) state.size = "shelf"; } catch (e) {}
+function save() { try { localStorage.setItem("ossEncBuild2", JSON.stringify(state)); } catch (e) {} }
 
 const $ = id => document.getElementById(id);
 const money = n => (n < 0 ? "−$" : "$") + Math.abs(n).toFixed(2).replace(/\.00$/, "");
