@@ -399,7 +399,7 @@ button { cursor: pointer; }
         <button type="button" class="startcard" id="startOne">
           <span class="sc-t">Build one</span>
           <span class="sc-d">Design a Lookout enclosure your way: colors, front, walls and add ons. Ships assembled with clear acrylic.</span>
-          <span class="sc-p" id="startOnePrice">From $14</span>
+          <span class="sc-p" id="startOnePrice">From $18</span>
         </button>
         <button type="button" class="startcard alt" id="startBulk">
           <span class="sc-t">Bulk order (10+)</span>
@@ -718,7 +718,7 @@ const CONFIG = {
 const PRICES = {
   // Per size: base enclosure (one color, clear acrylic, spider sticker over NFC tag, assembled), each solid wall, humidity floor
   sizes: {
-    shelf: { enclosure: 14, solidWall: 1, humidityFloor: 1 },   // Lookout Mini: real costs + 20%, +$1 for Stripe fees
+    shelf: { enclosure: 18, solidWall: 1, humidityFloor: 1 },   // Lookout Mini: raised to $18 (2026-11-07) to cover vent holes and failed prints
     small: { enclosure: 25, solidWall: 3, humidityFloor: 6 },
     mid:   { enclosure: 55, solidWall: 5, humidityFloor: 10 },
     big:   { enclosure: 70, solidWall: 6, humidityFloor: 12 },
@@ -728,7 +728,7 @@ const PRICES = {
   secondColor: 1,      // the second color (one AMS color change)
   moreColors: 0.25,    // each color after the second (extra single color plates)
   namePlaque: 3,       // name plaque (NFC tag sealed inside)
-  logoSticker: 5,      // your logo printed over the NFC tag
+  logoSticker: 7,      // your logo printed over the NFC tag (priced high on purpose: lots of work)
   bulkKit: 7,          // each Mini in a bulk order: base, one color, no acrylic, unassembled
   bulkMin: 10
 };
