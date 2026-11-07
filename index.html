@@ -1516,6 +1516,47 @@ function mesh(g, m, edges) {
   if (edges) grp.add(new THREE.LineSegments(edges, m === mats.acrylic ? mats.acrylicEdge : mats.edge));
   return grp;
 }
+// Air holes drilled around the edges of the side sheets and the skylight sheet.
+// Holes are melted with a soldering iron, so these are only for the look; never show sizes to customers.
+const HOLE = { d: 3.0, inset: 7.5, gap: 11 };
+let holeGeoCache = null;
+function holeGeos() {
+  if (holeGeoCache) return holeGeoCache;
+  holeGeoCache = {
+    dark: new THREE.CircleGeometry(HOLE.d / 2, 20),
+    rim: new THREE.RingGeometry(HOLE.d / 2, HOLE.d / 2 + 0.45, 24),
+  };
+  return holeGeoCache;
+}
+function addHoles(grp, g) {
+  if (!mats.holeDark) {
+    mats.holeDark = new THREE.MeshBasicMaterial({ color: 0x0b0d14, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    mats.holeRim = new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+  }
+  g.computeBoundingBox();
+  const b = g.boundingBox, size = new THREE.Vector3(); b.getSize(size);
+  const axes = ["x", "y", "z"], thin = axes.reduce((a, k) => size[k] < size[a] ? k : a, "x");
+  const [ua, va] = axes.filter(k => k !== thin);
+  const u0 = b.min[ua] + HOLE.inset, u1 = b.max[ua] - HOLE.inset, v0 = b.min[va] + HOLE.inset, v1 = b.max[va] - HOLE.inset;
+  const pts = [];
+  const line = (a0, a1, fixedAxisVal, along, fixedAxis, skipEnds) => {
+    const n = Math.max(1, Math.round((a1 - a0) / HOLE.gap));
+    for (let i = skipEnds ? 1 : 0; i <= (skipEnds ? n - 1 : n); i++) { const p = {}; p[along] = a0 + (a1 - a0) * i / n; p[fixedAxis] = fixedAxisVal; pts.push(p); }
+  };
+  line(u0, u1, v0, ua, va, false); line(u0, u1, v1, ua, va, false);   // two long edges, corners included
+  line(v0, v1, u0, va, ua, true); line(v0, v1, u1, va, ua, true);     // two short edges, without the corners again
+  const hg = holeGeos(), mid = (b.min[thin] + b.max[thin]) / 2, half = size[thin] / 2 + 0.06;
+  const dark = new THREE.InstancedMesh(hg.dark, mats.holeDark, pts.length * 2), rim = new THREE.InstancedMesh(hg.rim, mats.holeRim, pts.length * 2);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+  const normal = new THREE.Vector3(); normal[thin] = 1;
+  q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+  pts.forEach((p, i) => [-1, 1].forEach((side, s) => {
+    const pos = new THREE.Vector3(); pos[ua] = p[ua]; pos[va] = p[va]; pos[thin] = mid + side * half;
+    m.compose(pos, q, one); dark.setMatrixAt(i * 2 + s, m); rim.setMatrixAt(i * 2 + s, m);
+  }));
+  dark.renderOrder = 2; rim.renderOrder = 3;
+  grp.add(dark, rim);
+}
 function buildUnit(geo) {
   const u = new THREE.Group();
   const p = {};
@@ -1530,6 +1571,7 @@ function buildUnit(geo) {
   p.doorGroup.add(mesh(geo.door, mats.door, geo.doorEdges));
   p.doorGroup.add(mesh(geo.sheetDoor, mats.acrylic, geo.sheetDoorEdges));
   p.clear = { back: mesh(geo.sheetBack, mats.acrylic, geo.sheetBackEdges), left: mesh(geo.sheetLeft, mats.acrylic, geo.sheetLeftEdges), right: mesh(geo.sheetRight, mats.acrylic, geo.sheetRightEdges) };
+  addHoles(p.clear.left, geo.sheetLeft); addHoles(p.clear.right, geo.sheetRight); addHoles(p.sky, geo.sheetSky);
   p.solid = { back: mesh(geo.back, mats.walls, geo.backEdges), left: mesh(geo.left, mats.walls, geo.leftEdges), right: mesh(geo.right, mats.walls, geo.rightEdges) };
   p.floor = mesh(geo.floor, mats.floor, null);
   p.frontGroup = new THREE.Group();
