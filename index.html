@@ -288,6 +288,14 @@ button { cursor: pointer; }
 .startcard.alt { border-color: var(--cyan); box-shadow: 0 0 18px rgba(46,230,255,.12); }
 .startcard.resumecard { border-color: var(--lime); box-shadow: 0 0 18px rgba(198,255,61,.14); }
 .startcard[hidden] { display: none; }
+.askbg { position: fixed; inset: 0; z-index: 80; background: rgba(6,4,14,.78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.askcard { width: 100%; max-width: 380px; background: var(--panel); border: 1.5px solid var(--pink); border-radius: 18px; padding: 18px; display: grid; gap: 10px; box-shadow: 0 0 28px rgba(255,63,208,.25); }
+.askcard h3 { margin: 0; font-family: var(--display); font-size: 1.15rem; }
+.askcard p { margin: 0; color: var(--muted); font-size: .92rem; line-height: 1.45; }
+.askbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.askbtns button { flex: 1 1 130px; min-height: 46px; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; padding: 10px 14px; }
+.askno { background: transparent; color: var(--text, #f2ecff); border: 1.5px solid var(--cyan); }
+.askyes { background: var(--pink); color: #1a0614; border: 1.5px solid var(--pink); }
 .startcard .sc-t { font-family: var(--display); font-size: 1.05rem; }
 .startcard .sc-d { color: var(--muted); font-size: .85rem; }
 .startcard .sc-p { font-family: var(--mono); color: var(--lime); font-size: .85rem; }
@@ -1345,8 +1353,24 @@ function renderResume() {
   const box = $("resumeBox"); if (!box) return;
   const show = hasDesign(); box.hidden = !show; $("startOver").hidden = !show;
 }
-function startNew() {
-  if (hasDesign() && !confirm("Start a new design? The one in progress will be cleared.")) return;
+// Our own yes/no box. The phone's built in confirm popup is blocked inside the Spoods app, so it can't be used.
+function askBox(title, msg, okLabel) {
+  return new Promise(res => {
+    const bg = document.createElement("div"); bg.className = "askbg";
+    bg.innerHTML = `<div class="askcard" role="alertdialog" aria-modal="true" aria-labelledby="askT" aria-describedby="askM">
+      <h3 id="askT"></h3><p id="askM"></p>
+      <div class="askbtns"><button type="button" class="askno">Keep my design</button><button type="button" class="askyes"></button></div></div>`;
+    bg.querySelector("#askT").textContent = title; bg.querySelector("#askM").textContent = msg; bg.querySelector(".askyes").textContent = okLabel;
+    const done = v => { bg.remove(); document.removeEventListener("keydown", key); res(v); };
+    const key = e => { if (e.key === "Escape") done(false); };
+    bg.querySelector(".askno").onclick = () => done(false);
+    bg.querySelector(".askyes").onclick = () => done(true);
+    bg.onclick = e => { if (e.target === bg) done(false); };
+    document.addEventListener("keydown", key); document.body.appendChild(bg); bg.querySelector(".askno").focus();
+  });
+}
+async function startNew() {
+  if (hasDesign() && !(await askBox("Start a new design?", "The design you have in progress will be cleared.", "Start new"))) return;
   resetBuilder(); lastPicked = null; go("build", 0); toast("New design started. Pick your colors!");
 }
 $("resumeBox").addEventListener("click", () => go("build", 0));
