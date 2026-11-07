@@ -123,6 +123,7 @@ button { cursor: pointer; }
 .zone.unset .zc { color: #ff7ab8; font-weight: 700; }
 .zone .sw.empty { background: repeating-linear-gradient(45deg, #2a2f3b 0 4px, #3a4050 4px 8px) !important; border: 1.5px dashed #ff7ab8; }
 .navnext.blocked { opacity: .55; }
+.startover { margin: 0 0 8px; font-size: .8rem; }
 #colorCountTag.need { color: #ff7ab8; }
 .palette-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .palette-head .now { font-size: .85rem; }
@@ -285,6 +286,8 @@ button { cursor: pointer; }
 .hello { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
 .startcard { display: grid; gap: 4px; text-align: left; background: var(--panel); border: 1.5px solid var(--pink); border-radius: 16px; padding: 14px 16px; box-shadow: 0 0 18px rgba(255,63,208,.15); }
 .startcard.alt { border-color: var(--cyan); box-shadow: 0 0 18px rgba(46,230,255,.12); }
+.startcard.resumecard { border-color: var(--lime); box-shadow: 0 0 18px rgba(198,255,61,.14); }
+.startcard[hidden] { display: none; }
 .startcard .sc-t { font-family: var(--display); font-size: 1.05rem; }
 .startcard .sc-d { color: var(--muted); font-size: .85rem; }
 .startcard .sc-p { font-family: var(--mono); color: var(--lime); font-size: .85rem; }
@@ -396,6 +399,11 @@ button { cursor: pointer; }
     <div class="sections" id="sectionsPane">
       <section class="section" id="start" data-search="start build bulk">
         <h2 class="hello">What are you making today?</h2>
+        <button type="button" class="startcard resumecard" id="resumeBox" hidden>
+          <span class="sc-t">Resume my design</span>
+          <span class="sc-d">Pick up right where you left off.</span>
+          <span class="sc-p">Continue →</span>
+        </button>
         <button type="button" class="startcard" id="startOne">
           <span class="sc-t">Build one</span>
           <span class="sc-d">Design a Lookout enclosure your way: colors, front, walls and add ons. Ships assembled with clear acrylic.</span>
@@ -410,6 +418,7 @@ button { cursor: pointer; }
       </section>
 
 <section class="section" id="size" data-search="size sizes shelf small mid big tall dimensions">
+        <button type="button" class="linkbtn startover" id="startOver">Start over with a new design</button>
         <div class="section-head"><h2>Size</h2><span class="tag"><b>Lookout Series</b> · outside W × D × H</span></div>
         <div class="opts" id="sizeOpts"></div>
       </section>
@@ -1287,6 +1296,7 @@ function go(mode, step = 0) {
   $("sectionsPane").scrollTop = 0;
   if (id === "account") renderAccount();
   if (id === "cart") renderSummary();
+  renderResume();
   if (id !== "account") showOrderScene(null);
   renderNav();
   requestAnimationFrame(updateScrollHint);
@@ -1326,8 +1336,21 @@ $("navNext").addEventListener("click", () => {
 });
 $("startOne").addEventListener("click", () => {
   if (state.bulk) { const size = "shelf"; state = JSON.parse(JSON.stringify(DEFAULT_STATE)); state.size = size; changed(); }
+  if (hasDesign()) { startNew(); return; }   // "Build one" with a design saved = start a fresh one (asks first)
   go("build", 0);
 });
+// A design in progress: offer to pick it back up or start fresh (blank colors).
+function hasDesign() { return !state.bulk && isDirty(); }
+function renderResume() {
+  const box = $("resumeBox"); if (!box) return;
+  const show = hasDesign(); box.hidden = !show; $("startOver").hidden = !show;
+}
+function startNew() {
+  if (hasDesign() && !confirm("Start a new design? The one in progress will be cleared.")) return;
+  resetBuilder(); lastPicked = null; go("build", 0); toast("New design started. Pick your colors!");
+}
+$("resumeBox").addEventListener("click", () => go("build", 0));
+$("startOver").addEventListener("click", startNew);
 $("startBulk").addEventListener("click", () => {
   if (!state.bulk) { state = JSON.parse(JSON.stringify(DEFAULT_STATE)); state.bulk = true; state.qty = PRICES.bulkMin; activeZone = "posts"; changed(); }
   go("bulk", 0);
