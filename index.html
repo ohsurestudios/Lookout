@@ -2723,14 +2723,34 @@ function trackHtml(it, st) {
   const n = String(it.tracking || "").trim();
   if (st < 4) return "";
   if (!n) return st === 4 ? `<div class="sd" style="margin-top:.5rem">Tracking number coming soon.</div>` : "";
-  const c = trackUrl(n, it.carrier), tr = it.track;
+  const other = /^other$/i.test(String(it.carrier || "").trim());
+  const c = other ? { name: "Carrier", url: "" } : trackUrl(n, it.carrier), tr = it.track;
   const fmt = d => { try { return new Date(d).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch (e) { return ""; } };
   const evs = st === 4 && tr && tr.events ? tr.events.slice().reverse().slice(0, 6) : [];
   const scans = evs.length ? `<ol class="scans">${evs.map((e, k) => `<li class="${k ? "" : "latest"}"><b>${escapeHtml(e.details || e.status || "Update")}</b><span>${escapeHtml([e.loc && e.loc.city, e.loc && e.loc.state].filter(Boolean).join(", "))}${e.date ? ` · ${fmt(e.date)}` : ""}</span></li>`).join("")}</ol>`
     : st === 4 ? `<div class="sd" style="margin-top:.4rem">Waiting for the first ${c.name} scan. The spider leaves the shop as soon as it's scanned.</div>` : "";
   const eta = st === 4 && tr && tr.eta ? `<div class="sd" style="margin-top:.35rem">Expected <b>${escapeHtml(new Date(tr.eta).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}</b></div>` : "";
-  return `<div class="track" style="margin-top:.5rem"><span class="sd">${c.name} tracking</span><code>${escapeHtml(n)}</code><a class="linkbtn" style="text-decoration:none" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Track package →</a></div>${eta}${scans}`;
+  // Carrier "Other" has no tracking site we know, so it gets a Copy button instead of a link.
+  // Inside the Spoods app, the link is handed to the app (carrier sites won't open inside the frame).
+  const action = other
+    ? `<button type="button" class="linkbtn" data-copytrack="${escapeHtml(n)}">Copy number</button>`
+    : `<a class="linkbtn" style="text-decoration:none" href="${escapeHtml(c.url)}" target="_blank" rel="noopener" data-track="${escapeHtml(n)}" data-carrier="${escapeHtml(c.name)}">Track package →</a>`;
+  return `<div class="track" style="margin-top:.5rem"><span class="sd">${c.name} tracking</span><code>${escapeHtml(n)}</code>${action}</div><div class="sd" style="margin-top:.3rem;font-size:.78rem">New labels can take up to a day to show up on the carrier's site.</div>${eta}${scans}`;
 }
+
+document.addEventListener("click", async e => {
+  const a = e.target.closest && e.target.closest("a[data-track]");
+  if (a && APP_MODE) {
+    e.preventDefault();
+    window.parent.postMessage({ type: "spoodhomes-open-tracking", number: a.dataset.track, carrier: a.dataset.carrier }, appParentOrigin || "*");
+    return;
+  }
+  const cp = e.target.closest && e.target.closest("[data-copytrack]");
+  if (cp) {
+    try { await navigator.clipboard.writeText(cp.dataset.copytrack); toast("Tracking number copied"); }
+    catch (err) { toast("Couldn't copy. Press and hold the number to copy it."); }
+  }
+});
 
 // Where Stripe sends people back to when they bought from inside the Spoods app (the app can override with ?return=).
 function appReturnTo() {
