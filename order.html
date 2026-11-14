@@ -82,7 +82,10 @@ const SIZES = {
   mid: { name: "Classic", dims: "6 × 7 × 6.1 in", door: "5 1/4 × 5 in", side: "6 1/4 × 5 in", sky: "5 × 6 1/2 in" },
   big: { name: "Grand", dims: "7.7 × 7.7 × 6.1 in", door: "7 × 5 in", side: "7 × 5 in", sky: "5 × 7 in" },
   tall: { name: "Tall", dims: "5.7 × 5.7 × 8.1 in", door: "5 × 7 in", side: "5 × 7 in", sky: "4 1/2 × 4 in" },
+  ugmini: { name: "Mini", full: "Underground Mini", ug: true, dims: "4.35 × 2.83 × 6 in", door: "3 × 5 in", lower: "2 1/2 × 3 3/4 in", upper: "2 1/2 × 1 1/8 in", head: "2 1/2 × 2 7/8 in" },
+  ugtall: { name: "Tall", full: "Underground Tall", ug: true, dims: "4.39 × 2.83 × 8 in", door: "3 × 7 in", lower: "2 1/2 × 5 3/4 in", upper: "2 1/2 × 1 1/8 in", head: "2 1/2 × 2 7/8 in" },
 };
+const fullName = z => z.full || `Lookout ${z.name}`;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const usd = n => (n == null || isNaN(n)) ? "—" : "$" + Number(n).toFixed(2);
@@ -91,8 +94,18 @@ const sw = c => `<span class="sw" style="background:${COLORS[c] || "#555"}"></sp
 function partsFor(b) {
   const q = b.qty || 1, c = b.colors || {}, rows = [];
   const add = (name, colorHtml, qty, flag, extra) => rows.push({ name, colorHtml, qty, flag, extra });
-  if (b.bulk) {
-    add("Body (base + posts)", sw(c.posts), q);
+  if ((SIZES[b.size] || {}).ug) {
+    add("Body", `${sw(c.face)} face · ${sw(c.web)} web · ${sw(c.trim)} trim · ${sw(c.posts)} posts${b.size === "ugtall" ? ` · ${sw(c.spider)} spider` : ""}`, q);
+    add("Back", `${sw(c.backOut)} outside · ${sw(c.backMid)} middle · ${sw(c.backIn)} inside`, q);
+    add("Door handle", `${sw(c.face)} front · ${sw(c.posts)} rest`, q);
+    const w = b.walls || {}, n = ks => ks.filter(k => w[k] === "solid");
+    const lo = n(["lowerLeft", "lowerRight"]), up = n(["upperLeft", "upperRight"]);
+    const side = l => l.map(k => /Left/.test(k) ? "left" : "right").join(" + ");
+    if (lo.length) add(`Solid lower side panel${lo.length > 1 ? "s" : ""} (${side(lo)})`, sw(c.walls), q * lo.length);
+    if (up.length) add(`Solid upper side panel${up.length > 1 ? "s" : ""} (${side(up)})`, sw(c.walls), q * up.length);
+    if (w.head === "solid") add("Solid top panel", sw(c.walls), q);
+  } else if (b.bulk) {
+    add("Body (base + posts)", b.vip && c.base && c.base !== c.posts ? `${sw(c.base)} base · ${sw(c.posts)} posts` : sw(c.posts), q);
     add("Lid", sw(c.posts), q); add("Skylight frame", sw(c.posts), q); add("Door handle", sw(c.posts), q);
   } else {
     add("Body", c.posts && c.posts !== c.base ? `${sw(c.base)} base · ${sw(c.posts)} posts` : sw(c.base), q);
@@ -100,9 +113,11 @@ function partsFor(b) {
       add(n, sw(c[k]), q, c[k] !== c.base ? "Own plate" : "");
   }
   const w = b.walls || {};
+  if (!(SIZES[b.size] || {}).ug) {
   if (w.back === "solid") add("Solid back panel", sw(c.walls), q);
   const sides = (w.left === "solid" ? 1 : 0) + (w.right === "solid" ? 1 : 0);
   if (sides) add(`Solid side panel${sides > 1 ? "s" : ""} (${[w.left === "solid" ? "left" : "", w.right === "solid" ? "right" : ""].filter(Boolean).join(" + ")})`, sw(c.walls), q * sides);
+  }
   if (b.floor) add("Humidity floor", sw(c.floor), q);
   if (b.front === "plaque") add(`Name plaque: “${b.plaqueName || ""}”`, `${sw(c.plaque)} plaque · ${sw(c.plaqueText)} letters · ${esc(b.plaqueFont || "Fredoka")} font`, q);
   else if (b.front === "logo") add("Customer logo sticker over NFC tag", "See logo below", q);
@@ -114,6 +129,15 @@ function partsFor(b) {
 function acrylicFor(b) {
   if (b.bulk) return [];
   const z = SIZES[b.size] || SIZES.shelf, q = b.qty || 1, w = b.walls || {}, out = [];
+  if (z.ug) {
+    out.push(["Door", z.door, q]);
+    const clear = ks => ks.filter(k => w[k] !== "solid").length;
+    const lo = clear(["lowerLeft", "lowerRight"]), up = clear(["upperLeft", "upperRight"]);
+    if (lo) out.push([lo > 1 ? "Lower sides" : "Lower side", z.lower, q * lo]);
+    if (up) out.push([up > 1 ? "Upper sides" : "Upper side", z.upper, q * up]);
+    if (w.head !== "solid") out.push(["Top", z.head, q]);
+    return out;
+  }
   out.push(["Door", z.door, q]);
   if (w.back !== "solid") out.push(["Back", z.door, q]);
   const clearSides = (w.left !== "solid" ? 1 : 0) + (w.right !== "solid" ? 1 : 0);
@@ -129,7 +153,7 @@ function render(d, focus) {
   const n = d.items.length;
   const shipZip = String(ship.zip || "").slice(0, 5);
   const totalCount = d.items.reduce((a, it) => a + (it.build?.qty || 1), 0);
-  let h = `<div class="top"><div class="kicker">OSS 3D Orders · Lookout order</div><h1>${esc(d.ref)}</h1>
+  let h = `<div class="top"><div class="kicker">OSS 3D Orders · Spood Home order</div><h1>${esc(d.ref)}</h1>
     <div class="sub">${esc(ship.name || d.customer.name)} · ${totalCount} enclosure${totalCount > 1 ? "s" : ""}${d.paidAt ? " · paid " + new Date(d.paidAt).toLocaleString() : ""}</div>
     <div class="pills"><span class="pill paid">PAID</span>${n > 1 ? `<span class="pill">${n} builds</span>` : ""}${d.shipping.boxes ? `<span class="pill">${d.shipping.boxes} box${d.shipping.boxes > 1 ? "es" : ""}</span>` : ""}${shipZip && d.quotedZip && shipZip !== d.quotedZip ? `<span class="pill warn">Check shipping zip</span>` : ""}</div></div>`;
 
@@ -144,9 +168,9 @@ function render(d, focus) {
 
   d.items.forEach((it, i) => {
     const b = it.build || {}, z = SIZES[b.size] || SIZES.shelf;
-    const tags = [b.bulk ? "Bulk kit · unassembled · no acrylic" : "Assembled", z.dims].map(t => `<span class="pill">${esc(t)}</span>`).join("");
+    const tags = [b.bulk ? "Bulk kit · unassembled · no acrylic" : "Assembled", ...(b.bulk && b.vip ? ["VIP: base color + logo"] : []), z.dims].map(t => `<span class="pill">${esc(t)}</span>`).join("");
     h += `<div class="card item" id="item${i + 1}"><div class="itemhead">${it.preview_url ? `<img src="${esc(it.preview_url)}" alt="3D preview of build ${i + 1}">` : `<div class="noimg"></div>`}
-      <div><div class="kicker">Build ${i + 1} of ${n}</div><h3>Lookout ${esc(z.name)}${b.bulk ? " bulk kit" : ""} × ${b.qty || 1}</h3><div class="price">${usd(it.total)}</div><div class="tags">${tags}</div></div></div>
+      <div><div class="kicker">Build ${i + 1} of ${n}</div><h3>${esc(fullName(z))}${b.bulk ? " bulk kit" : ""} × ${b.qty || 1}</h3><div class="price">${usd(it.total)}</div><div class="tags">${tags}</div></div></div>
       <div class="sub2">Parts</div><div class="parts">${partsFor(b).map(partRow).join("")}</div>`;
     const acr = acrylicFor(b);
     if (acr.length) h += `<div class="sub2">Acrylic, 1 mm</div><div class="parts">${acr.map(([nm, size, q]) => partRow({ name: nm, colorHtml: esc(size), qty: q })).join("")}</div>`;
