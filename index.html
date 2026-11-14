@@ -258,6 +258,10 @@ button { cursor: pointer; }
 .scrollhint.up { border-color: var(--cyan); box-shadow: 0 0 14px rgba(46,230,255,.45); animation: none; }
 .spoodsacct { font-size: .8rem; color: var(--muted); padding: 8px 10px; border: 1px dashed var(--lime); border-radius: 10px; }
 .ghostbtn { background: transparent !important; border: 1px solid var(--cyan) !important; color: var(--cyan) !important; }
+.cibreak { display: grid; gap: 2px; margin: 6px 0; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: .76rem; color: var(--muted); }
+.cibreak > div { display: flex; justify-content: space-between; gap: 10px; }
+.cibreak > div span:last-child { font-family: var(--mono); color: var(--fg); }
+.cibreak .cbt { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; color: var(--fg); font-weight: 700; }
 .cilogo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); font-size: .78rem; }
 .cilogo img { width: 34px; height: 34px; object-fit: contain; background: #fff; border-radius: 50%; }
 .cilogo.missing { border-color: var(--pink); color: var(--pink); font-weight: 700; }
@@ -1351,6 +1355,8 @@ function toast(msg) {
 }
 function previewDataUrl() {
   try {
+    // Take the picture without the breathing glow, so no part looks tinted pink.
+    glow = null; glowOn.forEach(m => m && m.emissive && m.emissive.setRGB(0, 0, 0)); glowOn = [];
     syncSplit(); renderer.render(scene, camera);
     const src = renderer.domElement, w = 360, h = Math.round(360 * src.height / Math.max(src.width, 1));
     const c = document.createElement("canvas"); c.width = w; c.height = h;
@@ -1430,6 +1436,16 @@ function renderCart() {
     row.querySelector(".amt").textContent = money(it.total);
     row.querySelectorAll(".cd")[0].textContent = l1;
     row.querySelectorAll(".cd")[1].textContent = l2;
+    // Price by line, so every add on (like the VIP extra) shows what it costs.
+    try {
+      const t = withState(Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), it.build), totals), q = it.build.qty || 1;
+      const br = document.createElement("div"); br.className = "cibreak";
+      const line = (label, amt, cls) => { const d = document.createElement("div"); if (cls) d.className = cls; d.innerHTML = `<span></span><span></span>`; d.children[0].textContent = label; d.children[1].textContent = amt; br.appendChild(d); };
+      t.unitRows.forEach(([label, amt]) => line(label, money(amt)));
+      line(`${money(t.unit)} each × ${q}`, money(t.encTotal), "cbt");
+      if (t.trayTotal) line(`Trays × ${it.build.trayQty}`, money(t.trayTotal), "cbt");
+      row.querySelector(".ci").insertBefore(br, row.querySelector(".cb"));
+    } catch (e) {}
     row.querySelector(".ed").addEventListener("click", () => editItem(it.id));
     row.querySelector(".rm").addEventListener("click", () => removeItem(it.id));
     if (it.build.front === "logo") {
