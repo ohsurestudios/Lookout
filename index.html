@@ -421,6 +421,12 @@ button { cursor: pointer; }
 .itemsel { display: flex; gap: 6px; flex-wrap: wrap; }
 .itemsel button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: .25rem .65rem; font-size: .78rem; color: var(--fg); }
 .itemsel button[aria-pressed="true"] { border-color: var(--pink); color: var(--pink); }
+.kitdots { position: absolute; left: 50%; transform: translateX(-50%); bottom: 92px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; max-width: min(330px, 86%); pointer-events: none; }
+.kitdots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); background: rgba(21,16,39,.7); }
+.kitdots.small i { width: 7px; height: 7px; }
+.kitdots i.done { background: var(--lime); border-color: var(--lime); }
+.kitdots i.cur { border-color: var(--pink); background: var(--pink); animation: kitpulse 1s ease-in-out infinite; }
+@keyframes kitpulse { 50% { box-shadow: 0 0 10px var(--pink); transform: scale(1.25); } }
 .stagebadge { position: absolute; left: 50%; transform: translateX(-50%); bottom: 54px; background: rgba(21,16,39,.85); border: 1px solid var(--pink); color: var(--fg); border-radius: 999px; padding: .35rem .9rem; font-weight: 700; font-size: .85rem; white-space: nowrap; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 /* Inside the Oh Sure Spoods app: the app already shows its own header */
@@ -442,6 +448,7 @@ button { cursor: pointer; }
     <div class="taphint" id="tapHint" hidden>👆 Tap a part on the model to pick it</div>
     <div class="turnnote" id="turnNote" role="status" aria-live="polite" hidden></div>
     <div class="stagebadge" id="stageBadge" hidden></div>
+    <div class="kitdots" id="kitDots" aria-hidden="true" hidden></div>
     <div class="view-tools" role="toolbar" aria-label="View">
       <button class="chip" id="vFront">Front</button>
       <button class="chip" id="vAngle">Angle</button>
@@ -791,7 +798,7 @@ button { cursor: pointer; }
       lower.add(segment(new THREE.Vector3(), foot.clone().sub(knee), 0.16, [C.black, C.lime, C.black, C.teal, C.dark], tex));
       const kb = furry(kneeGeo, { len: 0.07, layers: 8, tex, repeat: [3, 2] }); lower.add(kb); // hides the joint seam
       piv.userData = { side: s, i, y0: 0.95, dir: dir.clone() };
-      root.add(piv); legs.push(piv); piv.userData.lower = lower;
+      root.add(piv); legs.push(piv); piv.userData.lower = lower; piv.userData.foot = foot.clone().sub(knee); // foot tip, in the lower leg's space
     }));
 
     return { group: root, body, head, abdomen, eyes, palps, legs };
@@ -2684,6 +2691,30 @@ function partsByKind(p, kinds) {
 }
 const easeIO = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
 const clamp01 = k => Math.max(0, Math.min(1, k));
+// How far a multi enclosure order is: kits fully printed = the lowest printed count across its plates.
+function kitProgress(plates, qty) {
+  const pl = (plates || []).filter(x => x.kind !== "tray");
+  const Q = Math.max(1, Number(qty) || 1, ...pl.map(x => Number(x.qty) || 1));
+  const doneOf = x => x.done != null ? Math.min(Q, Number(x.done) || 0) : (x.printed ? Q : 0);
+  return { Q, kits: pl.length ? Math.min(...pl.map(doneOf)) : 0, doneOf };
+}
+function showKitDots(Q, kits, on) {
+  const el = $("kitDots"); if (!el) return;
+  el.hidden = !on || Q < 2; if (el.hidden) return;
+  el.classList.toggle("small", Q > 20);
+  el.innerHTML = Array.from({ length: Q }, (_, i) => `<i class="${i < kits ? "done" : i === kits ? "cur" : ""}"></i>`).join("");
+}
+// A bagged kit: the parts in the kit's color inside a clear bag, with a twist tie.
+function makeBundle(hex, w = 44, h = 46, d = 56) {
+  const g = new THREE.Group();
+  const inner = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, h * 0.8, d * 0.82), new THREE.MeshStandardMaterial({ color: renderColor(hex), roughness: 0.8 }));
+  inner.position.y = h * 0.42; g.add(inner);
+  const bag = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshPhysicalMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.28, roughness: 0.15, depthWrite: false }));
+  bag.position.y = h / 2; g.add(bag);
+  const tie = new THREE.Mesh(new THREE.CylinderGeometry(3, 5, 8, 10), new THREE.MeshStandardMaterial({ color: 0xc6ff3d, roughness: 0.5 }));
+  tie.position.y = h + 3; g.add(tie);
+  return g;
+}
 function showOrderScene(o) {
   if (!renderer) return;
   if (orderAnim) {
@@ -2691,12 +2722,13 @@ function showOrderScene(o) {
     if (orderAnim.local && orderAnim.local.parent) orderAnim.local.parent.remove(orderAnim.local);
     unghostAll(); removePrintClip(); resetUnitPoses(); grid.position.x = 0; grid.visible = true;
     controls.autoRotate = $("vSpin").getAttribute("aria-pressed") === "true";
-    orderAnim = null; $("stageBadge").hidden = true; viewBoost = 1; viewLift = 0;
+    orderAnim = null; $("stageBadge").hidden = true; showKitDots(0, 0, false); root.scale.setScalar(1); root.position.x = 0; root.visible = true; viewBoost = 1; viewLift = 0;
     lastLayout = ""; updateScene();
   }
   if (!o || !o.build) return;
   const b = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), o.build, { colors: Object.assign({}, DEFAULT_STATE.colors, o.build.colors), walls: Object.assign({}, DEFAULT_STATE.walls, o.build.walls), tray: "none" });
   if (!AVAILABLE_SIZES.includes(b.size)) b.size = "shelf";
+  if (b.bulk) { b.acrylic = false; b.assembled = false; } // kits ship without acrylic
   lastLayout = ""; withState(b, updateScene);
   const extras = new THREE.Group(); scene.add(extras);
   const local = new THREE.Group(); units[0] && units[0].add(local);
@@ -2708,8 +2740,11 @@ function showOrderScene(o) {
     else {
       a.mode = "explode";
       const kinds = [...new Set(plates.map(x => x.kind))];
-      const printedK = new Set(kinds.filter(k => plates.filter(x => x.kind === k).every(x => x.printed)));
-      const nowK = new Set(plates.filter(x => x.printing && !x.printed).map(x => x.kind)); // several printers can run at once
+      // Multi kit orders show the kit being printed now: its parts are done once their plate's count passes this kit.
+      const kp = kitProgress(plates, b.qty), cur = kp.kits;
+      a.kit = kp;
+      const printedK = new Set(kinds.filter(k => plates.filter(x => x.kind === k).every(x => kp.doneOf(x) > cur)));
+      const nowK = new Set(plates.filter(x => x.printing && kp.doneOf(x) <= cur).map(x => x.kind)); // several printers can run at once
       const allDone = printedK.size === kinds.length;
       const groups = partsByKind(p, kinds);
       const printedObjs = new Set(), waiting = [];
@@ -2736,7 +2771,40 @@ function showOrderScene(o) {
       a.sparkles = makeSparkles(40, 0xff7be6, 3); extras.add(a.sparkles);
     }
   }
-  if (o.stage === 2 && p) {
+  const bulkQ = b.bulk ? Math.max(1, Number(b.qty) || 1) : 0;
+  if (o.stage === 2 && p && b.bulk) {          // Finishing a kit order: the spider walks the line holding a Quality Control sign
+    a.qcMode = true; root.visible = false;
+    const M = MODEL_DATA.meta[b.size], N = bulkQ, PER = 5, cols = Math.min(N, PER), rows = Math.ceil(N / PER);
+    const gap = M.W + 30, rowGap = M.D + 150;
+    a.qc = { N, PER, cols, rows, gap, rowGap, kits: [], checks: [], shown: -1 };
+    a.line = new THREE.Group(); extras.add(a.line);
+    a.line.position.z = -(M.D / 2 + 330); // shift back so the spider and sign sit above the label and buttons
+    for (let i = 0; i < N; i++) {
+      const r = Math.floor(i / PER), c = i % PER, rowCols = Math.min(PER, N - r * PER);
+      const k = root.clone(true); k.visible = true;
+      k.position.set((c - (rowCols - 1) / 2) * gap, 0, (rows - 1) * rowGap / 2 - r * rowGap);
+      a.line.add(k); a.qc.kits.push(k);
+    }
+    a.spider = newSpider(); a.spider.group.scale.setScalar(34); a.line.add(a.spider.group);
+    // The sign: a little board on a stick, always turned toward the camera.
+    const sign = new THREE.Group();
+    const sc = document.createElement("canvas"); sc.width = 256; sc.height = 128; const g2 = sc.getContext("2d");
+    g2.fillStyle = "#ffffff"; g2.fillRect(0, 0, 256, 128); g2.strokeStyle = "#ff3fd0"; g2.lineWidth = 12; g2.strokeRect(6, 6, 244, 116);
+    g2.fillStyle = "#1a0b2e"; g2.font = "900 40px system-ui, sans-serif"; g2.textAlign = "center"; g2.textBaseline = "middle";
+    g2.fillText("QUALITY", 128, 46); g2.fillText("CONTROL", 128, 90);
+    const st = new THREE.CanvasTexture(sc); st.encoding = THREE.sRGBEncoding;
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ map: st, side: THREE.DoubleSide }));
+    board.position.y = 4.3; sign.add(board);
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.5, 8), new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.8 }));
+    stick.position.y = 1.75; sign.add(stick);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.9, 0.3, 20), new THREE.MeshStandardMaterial({ color: 0x2b2b36, roughness: 0.6 }));
+    foot.position.y = 0.15; sign.add(foot);
+    // The sign stands on its own base next to the spider, in front of the kits.
+    const zFront = (rows - 1) * rowGap / 2 + M.D / 2 + 75;
+    sign.scale.setScalar(34); sign.position.set(Math.min(cols, 3) * gap * 0.5 + 40, 0, zFront); a.line.add(sign); a.qcSign = sign;
+    a.spider.group.position.set(Math.min(cols, 3) * gap * 0.5 - 70, 0, zFront + 10);
+    a.sparkles = makeSparkles(26, 0xc6ff3d, 3.5); extras.add(a.sparkles);
+  } else if (o.stage === 2 && p) {
     a.rag = makeRag(); a.rag.rotation.x = Math.PI / 2; local.add(a.rag);
     const M = MODEL_DATA.meta[b.size];
     const Hs = M.door ? M.door[1][2] - M.door[0][2] : M.Hp - 22.7;
@@ -2749,7 +2817,20 @@ function showOrderScene(o) {
     a.spider = newSpider(); a.spider.group.scale.setScalar(23);
     a.spider.group.position.set(84, 0, 6); a.spider.group.rotation.y = -1.15; extras.add(a.spider.group); // faces the viewer
   }
-  if (o.stage >= 3) {
+  if (o.stage >= 3 && b.bulk) {                // Kits ship 10 to a long 14 x 7 x 7 box, packed as bagged bundles
+    a.bulkBox = true; root.visible = false;
+    a.box = makeBox({ W: 250, H: 120, D: 125 }); extras.add(a.box.group);
+    a.bundles = new THREE.Group(); a.box.group.add(a.bundles);
+    const n = Math.min(bulkQ, 10);
+    for (let i = 0; i < n; i++) { const bd = makeBundle(fil(b.colors.posts).hex); bd.userData.home = [(i % 5) * 46 - 92, 2, Math.floor(i / 5) * 58 - 29]; bd.position.set(...bd.userData.home); a.bundles.add(bd); }
+    const boxes = Math.ceil(bulkQ / 10);
+    a.moreBoxes = new THREE.Group(); extras.add(a.moreBoxes);
+    // Packaging shows every box side by side (up to 3); later stages carry just the first.
+    const shown = Math.min(boxes, 3);
+    if (o.stage === 3) a.box.group.position.x = -(shown - 1) * 140;
+    for (let i = 1; i < shown; i++) { const mb = makeBox({ W: 250, H: 120, D: 125 }); setFlaps(mb, 1); mb.tape.visible = true; mb.group.position.set(-(shown - 1) * 140 + i * 280, 0, 0); a.moreBoxes.add(mb.group); }
+    a.moreBoxes.visible = o.stage === 3;
+  } else if (o.stage >= 3) {
     const MB = MODEL_DATA.meta[b.size]; // the box grows to fit wider or taller enclosures
     a.box = makeBox({ W: Math.max(100, MB.W + 14), H: Math.max(176, (MB.H || MB.Hp + 5) + 16), D: Math.max(146, MB.D + 26) }); extras.add(a.box.group);
   }
@@ -2766,10 +2847,16 @@ function showOrderScene(o) {
   }
   if (o.stage === 5) { a.confetti = makeConfetti(); extras.add(a.confetti); }
   controls.autoRotate = o.stage === 1 && a.mode === "explode"; controls.autoRotateSpeed = 1.0;
-  $("stageBadge").textContent = STAGES[o.stage].head; $("stageBadge").hidden = false;
-  viewBoost = o.stage === 0 ? 1.45 : o.stage === 1 && a.mode === "explode" ? 1.3 : o.stage === 3 ? 1.75 : o.stage >= 4 ? 2.3 : 1;
+  const word = b.bulk ? "Kit" : "Enclosure", Qn = Math.max(1, Number(b.qty) || 1);
+  let badge = STAGES[o.stage].head;
+  if (o.stage === 1 && a.kit && a.kit.Q > 1) badge += a.kit.kits >= a.kit.Q ? ` · all ${a.kit.Q} printed` : ` · ${word} ${a.kit.kits + 1} of ${a.kit.Q}`;
+  else if (b.bulk && o.stage !== 1) badge += ` · ${Qn} kits${o.stage >= 3 && Qn > 10 ? `, ${Math.ceil(Qn / 10)} boxes` : ""}`;
+  $("stageBadge").textContent = badge; $("stageBadge").hidden = false;
+  showKitDots(a.kit ? a.kit.Q : 0, a.kit ? a.kit.kits : 0, o.stage === 1 && !!a.kit);
+  viewBoost = o.stage === 0 ? 1.45 : o.stage === 1 && a.mode === "explode" ? 1.3 : o.stage === 3 ? (a.bulkBox ? 1.6 + 0.7 * Math.min(2, Math.ceil(bulkQ / 10) - 1) : 1.75) : o.stage >= 4 ? 2.3 : a.qcMode ? 1.0 + 0.27 * a.qc.cols + 0.2 * (a.qc.rows - 1) : 1;
   viewLift = o.stage >= 4 ? 40 : 0;
-  if (a.camFix) { controls.autoRotate = false; a.camFix(); } else setView(o.stage === 2 ? "front" : "angle");
+  controls.maxDistance = a.qcMode ? 4000 : 1400; // a long line of kits needs the camera further back
+  if (a.camFix) { controls.autoRotate = false; a.camFix(); } else setView(a.qcMode ? [0.18, 0.95, 1] : o.stage === 2 ? "front" : "angle"); // the kit line is seen from above so every row shows
 }
 // Delivered: after the map trip, switch to the close up of the drop off, wave, and unboxing.
 function toUnboxing(a, now) {
@@ -2779,6 +2866,7 @@ function toUnboxing(a, now) {
   a.spider.group.scale.setScalar(a.spider.S); a.box.group.scale.setScalar(1); a.spider.group.rotation.y = 0;
   viewBoost = 2.3; viewLift = 40; setView("angle");
 }
+const _qcV = new THREE.Vector3();
 function tickOrderAnim(now) {
   const a = orderAnim, t = now - a.t0, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const p = units[0] && units[0].userData.p; if (!p) return;
@@ -2813,6 +2901,18 @@ function tickOrderAnim(now) {
       a.nozzle.position.set(c.x + Math.sin(t * 7) * 14, bx.max.y + 8 + Math.sin(t * 2) * 2, c.z + Math.cos(t * 4.6) * 14);
     }
     a.sparkles.material.opacity = a.allDone ? 0.5 + 0.5 * Math.sin(t * 6) : 0.25; a.sparkles.rotation.y = t * 0.3;
+  } else if (a.stage === 2 && a.qcMode) {   // Quality control: the spider looks the kits over, glances at you, then back to work
+    const sp = a.spider, cyc = 7, u = reduce ? 0 : t % cyc;
+    const atKits = Math.PI / 2, atYou = -Math.PI / 2;       // rotation 0 faces +x; the kits are behind it, the camera in front
+    let ry;
+    if (u < 3.4) ry = atKits + Math.sin(u * 1.4) * 0.35;      // scanning along the rows
+    else if (u < 4.2) ry = atKits + (atYou - atKits) * easeIO((u - 3.4) / 0.8);   // spins around to look at you
+    else if (u < 5.8) ry = atYou;
+    else ry = atYou + (atKits - atYou) * easeIO(clamp01((u - 5.8) / 0.8));        // and back to the kits
+    sp.group.rotation.y = ry;
+    if ((u > 3.4 && u < 4.2) || u > 5.8) spWalk(sp, t, 0.8); else spStand(sp, t); // little steps while turning
+    if (sp.f) sp.f.head.rotation.z = u >= 4.2 && u < 5.8 ? Math.sin(t * 3) * 0.12 : 0;  // a curious head tilt while looking at you
+    a.sparkles.material.opacity = 0.12; a.sparkles.rotation.y = t * 0.3;
   } else if (a.stage === 2) {                // Finishing: a rag polishes the door glass, then it gleams
     const G = a.glass, cx = (G.x0 + G.x1) / 2, cz = (G.z0 + G.z1) / 2, rx = (G.x1 - G.x0) * 0.3, rz = (G.z1 - G.z0) * 0.3;
     const cyc = 5, u = reduce ? 4 : t % cyc, wiping = u < 3.4;
@@ -2825,6 +2925,11 @@ function tickOrderAnim(now) {
     a.glint.position.set(G.x0 + (G.x1 - G.x0) * gk, -4, cz);
     a.glint.material.opacity = u > 3.5 ? Math.sin(gk * Math.PI) * 0.85 : 0;
     a.sparkles.material.opacity = u > 3.5 ? 0.4 + 0.5 * Math.sin(t * 9) : 0.08; a.sparkles.rotation.y = t * 0.4;
+  } else if (a.stage === 3 && a.bulkBox) {   // Packaging kits: bundles drop in one by one, then the flaps fold
+    const n = a.bundles.children.length, cyc = 1.2 + n * 0.35 + 2.4, u = reduce ? cyc : t % cyc;
+    a.bundles.children.forEach((bd, i) => { const k = easeIO(clamp01((u - 0.4 - i * 0.35) / 0.5)); const h = bd.userData.home; bd.position.set(h[0], h[1] + 220 * (1 - k), h[2]); bd.visible = k > 0; });
+    const fold = clamp01((u - (0.6 + n * 0.35)) / 1.4);
+    setFlaps(a.box, easeIO(fold)); a.box.tape.visible = fold >= 1;
   } else if (a.stage === 3) {                // Packaging: lowered into a box, flaps fold shut
     const cyc = 6, u = reduce ? 1 : (t % cyc);
     const drop = Math.max(0, 1 - u / 2), fold = Math.min(1, Math.max(0, (u - 2.2) / 1.6));
@@ -2866,7 +2971,8 @@ function tickOrderAnim(now) {
       const open = easeIO(clamp01((u - 6.6) / 1.2));
       setFlaps(a.box, 1 - open);
       const rise = easeIO(clamp01((u - 7.8) / 1.6));
-      root.visible = u > 7.6; root.position.y = 4 + rise * 225;
+      if (a.bulkBox) { root.visible = false; a.bundles.visible = u > 7.6; a.bundles.position.y = rise * 130; }
+      else { root.visible = u > 7.6; root.position.y = 4 + rise * 225; }
     }
     if (u >= 6.2) { a.confetti.visible = true; tickConfetti(a.confetti, reduce ? 0.6 : u - 9.2); } else a.confetti.visible = false;
     if (u < 1.6) sp.group.visible = true;
@@ -3186,6 +3292,14 @@ const STAGES = [
   { key: "shipped", label: "Shipped", head: "On its way!", desc: "Your enclosure has shipped and a very dedicated spider is carrying it to you." },
   { key: "delivered", label: "Delivered", head: "Delivered!", desc: "Your enclosure has arrived. Enjoy the new spood home!" },
 ];
+// Kit orders get their own words where the single enclosure text wouldn't fit (no acrylic, packed 10 to a box).
+const BULK_DESC = {
+  1: "Your kits are being printed one at a time on the P1S.",
+  2: "Every kit is going through quality control before it's packed with its NFC tag and sticker.",
+  3: "Your kits are packed 10 to a box and getting ready to ship.",
+  4: "Your kits have shipped and a very dedicated spider is carrying them to you.",
+  5: "Your kits have arrived. Happy building!",
+};
 function stageIndex(status) {
   const s = String(status || "").toLowerCase().replace(/[^a-z]/g, "");
   if (/deliver|complete|done|arrived/.test(s)) return 5;
@@ -3249,7 +3363,7 @@ function renderOrderDetail(o) {
     <h2>${escapeHtml(o.ref)}</h2>
     ${o.items.length > 1 ? `<div class="itemsel">${o.items.map((x, k) => `<button type="button" data-k="${k}" aria-pressed="${k === selectedItem}">Build ${k + 1}</button>`).join("")}</div>` : ""}
     <div class="tracker">${tracker}</div>
-    <div class="stagebox"><div class="sh">${S.head}</div><div class="sd">${S.desc}</div>${platesHtml(it, st)}${trackHtml(it, st)}</div>
+    <div class="stagebox"><div class="sh">${S.head}</div><div class="sd">${(it.build && it.build.bulk && BULK_DESC[st]) || S.desc}</div>${platesHtml(it, st)}${trackHtml(it, st)}</div>
     <div class="stagebox"><div class="ot"><b>${escapeHtml(fullName(z))}${it.build?.bulk ? " bulk kit" : ""} × ${it.build?.qty || 1}</b></div><div class="sd">${escapeHtml(parts[0])}</div><div class="sd">${escapeHtml(parts[1])}</div></div>
     ${orders.admin && o.sheetUrl ? `<a class="linkbtn" style="justify-self:start;text-decoration:none" href="${escapeHtml(o.sheetUrl)}" target="_blank" rel="noopener">Open full order sheet →</a>` : ""}
     <div class="sd" style="font-size:.74rem;color:var(--muted)">Paid ${new Date(o.paidAt).toLocaleString()} · updates every minute</div>
@@ -3263,6 +3377,13 @@ function platesHtml(it, st) {
   if (st !== 1 || !(it.plates || []).length) return "";
   const done = it.plates.filter(x => x.printed).length;
   const now = it.plates.filter(x => x.printing && !x.printed);
+  const kp = kitProgress(it.plates, it.build && it.build.qty), word = it.build && it.build.bulk ? "kit" : "enclosure";
+  if (kp.Q > 1) {
+    const cur = Math.min(kp.kits + 1, kp.Q);
+    const nowCur = now.filter(x => kp.doneOf(x) <= kp.kits); // only what's printing for this enclosure
+    const nowTxt2 = nowCur.length ? ` · now printing the ${nowCur.map(x => `<b>${escapeHtml((KIND_NAMES[x.kind] || "part").toLowerCase())}</b>`).join(" and ")}` : "";
+    return `<div class="sd" style="margin-top:.45rem"><b>${kp.kits} of ${kp.Q}</b> ${word}s printed${kp.kits < kp.Q ? ` · working on ${word} <b>#${cur}</b>${nowTxt2}` : ""}</div>`;
+  }
   const nowTxt = now.map(x => `the <b>${escapeHtml((KIND_NAMES[x.kind] || "part").toLowerCase())}</b>${x.printer ? ` on the ${escapeHtml(x.printer)}` : ""}`).join(" and ");
   return `<div class="sd" style="margin-top:.45rem"><b>${done} of ${it.plates.length}</b> parts printed${now.length ? ` · now printing ${nowTxt}` : ""}</div><div class="plist" style="margin-top:.3rem">${it.plates.map(x => `<span class="${x.printed ? "on" : x.printing ? "now" : ""}">${x.printed ? "✓ " : x.printing ? "▶ " : ""}${escapeHtml(KIND_NAMES[x.kind] || "Part")}</span>`).join("")}</div>`;
 }
